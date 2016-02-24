@@ -7,7 +7,7 @@ MODULE sancho_method
                           mat_norm, &
                           mat_copy, &
                           mat_create, &
-                          mat_delete
+                          mat_release
 
 #include "./base/base_uses.f90"
 
@@ -57,7 +57,7 @@ CONTAINS
     CALL mat_axpy(CONJG(energy), "H", St, B)
 
     ! clear GR0 and recreate to correct size
-    CALL mat_delete(GR0)
+    CALL mat_release(GR0)
     CALL mat_create(GR0, mat_nrows(Ho), mat_ncols(Ho))
 
     ! create some further temp matrices, they may be non-square
@@ -87,17 +87,17 @@ CONTAINS
     END IF
 
     ! cleanup
-    CALL mat_delete(So)
-    CALL mat_delete(Ho)
-    CALL mat_delete(St)
-    CALL mat_delete(Ht)
-    CALL mat_delete(A)
-    CALL mat_delete(B)
-    CALL mat_delete(E)
-    CALL mat_delete(ES)
-    CALL mat_delete(GR0_A)
-    CALL mat_delete(GR0_B)
-    CALL mat_delete(B_copy)
+    CALL mat_release(So)
+    CALL mat_release(Ho)
+    CALL mat_release(St)
+    CALL mat_release(Ht)
+    CALL mat_release(A)
+    CALL mat_release(B)
+    CALL mat_release(E)
+    CALL mat_release(ES)
+    CALL mat_release(GR0_A)
+    CALL mat_release(GR0_B)
+    CALL mat_release(B_copy)
   END SUBROUTINE surface_G0_sancho
 
 END MODULE sancho_method

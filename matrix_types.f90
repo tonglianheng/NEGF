@@ -20,7 +20,7 @@ MODULE matrix_types
 
   ! public methods
   PUBLIC :: mat_create,&
-            mat_delete, &
+            mat_release, &
             mat_symmetry, &
             mat_real_to_complex, &
             mat_mult, &
@@ -35,6 +35,7 @@ MODULE matrix_types
             mat_copy
 
   CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'matrix_types'
+  INTEGER, PRIVATE, SAVE :: last_mat_id = 0
 
   ! symmetry types
   INTEGER, PARAMETER :: MAT_GENERAL = 0, &
@@ -47,6 +48,7 @@ MODULE matrix_types
   TYPE mat_d_data
      REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: p
      INTEGER :: symmetry
+     INTEGER :: id_nr, ref_count
   END type mat_d_data
 
   TYPE mat_d_obj
@@ -56,6 +58,7 @@ MODULE matrix_types
   TYPE mat_z_data
      COMPLEX(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: p
      INTEGER :: symmetry
+     INTEGER :: id_nr, ref_count
   END type mat_z_data
 
   TYPE mat_z_obj
@@ -67,10 +70,10 @@ MODULE matrix_types
      MODULE PROCEDURE mat_create_z
   END INTERFACE mat_create
 
-  INTERFACE mat_delete
-     MODULE PROCEDURE mat_delete_d
-     MODULE PROCEDURE mat_delete_z
-  END INTERFACE mat_delete
+  INTERFACE mat_release
+     MODULE PROCEDURE mat_release_d
+     MODULE PROCEDURE mat_release_z
+  END INTERFACE mat_release
 
   INTERFACE mat_symmetry
      MODULE PROCEDURE mat_symmetry_d
@@ -134,6 +137,18 @@ MODULE matrix_types
 
 CONTAINS
 
+  SUBROUTINE mat_retain_d(mat)
+    TYPE(mat_d_obj), INTENT(INOUT) :: mat
+    CPASSERT(ASSOCIATED(mat%obj))
+    mat%obj%ref_count = mat%obj%ref_count + 1
+  END SUBROUTINE mat_retain_d
+
+  SUBROUTINE mat_retain_z(mat)
+    TYPE(mat_z_obj), INTENT(INOUT) :: mat
+    CPASSERT(ASSOCIATED(mat%obj))
+    mat%obj%ref_count = mat%obj%ref_count + 1
+  END SUBROUTINE mat_retain_z
+
   SUBROUTINE mat_create_d(mat, nrows, ncols, symmetry)
     TYPE(mat_d_obj), INTENT(INOUT) :: mat
     INTEGER, OPTIONAL :: symmetry
@@ -147,6 +162,10 @@ CONTAINS
     ELSE
        mat%obj%symmetry = MAT_GENERAL
     END IF
+    mat%obj%ref_count = 1
+    ! book keeping
+    mat%obj%id_nr = last_mat_id + 1
+    last_mat_id = mat%obj%id_nr
   END SUBROUTINE mat_create_d
 
   SUBROUTINE mat_create_z(mat, nrows, ncols, symmetry)
@@ -162,23 +181,35 @@ CONTAINS
     ELSE
        mat%obj%symmetry = MAT_GENERAL
     END IF
+    mat%obj%ref_count = 1
+    ! book keeping
+    mat%obj%id_nr = last_mat_id + 1
+    last_mat_id = mat%obj%id_nr
   END SUBROUTINE mat_create_z
 
-  SUBROUTINE mat_delete_d(mat)
+  SUBROUTINE mat_release_d(mat)
     TYPE(mat_d_obj), INTENT(INOUT) :: mat
     IF (ASSOCIATED(mat%obj)) THEN
-       IF (ALLOCATED(mat%obj%p)) DEALLOCATE(mat%obj%p)
-       DEALLOCATE(mat%obj)
+       mat%obj%ref_count = mat%obj%ref_count - 1
+       IF (mat%obj%ref_count .EQ. 0) THEN
+          IF (ALLOCATED(mat%obj%p)) DEALLOCATE(mat%obj%p)
+          DEALLOCATE(mat%obj)
+       END IF
+       NULLIFY(mat%obj)
     END IF
-  END SUBROUTINE mat_delete_d
+  END SUBROUTINE mat_release_d
 
-  SUBROUTINE mat_delete_z(mat)
+  SUBROUTINE mat_release_z(mat)
     TYPE(mat_z_obj), INTENT(INOUT) :: mat
     IF (ASSOCIATED(mat%obj)) THEN
-       IF (ALLOCATED(mat%obj%p)) DEALLOCATE(mat%obj%p)
-       DEALLOCATE(mat%obj)
+       mat%obj%ref_count = mat%obj%ref_count - 1
+       IF (mat%obj%ref_count .EQ. 0) THEN
+          IF (ALLOCATED(mat%obj%p)) DEALLOCATE(mat%obj%p)
+          DEALLOCATE(mat%obj)
+       END IF
+       NULLIFY(mat%obj)
     END IF
-  END SUBROUTINE mat_delete_z
+  END SUBROUTINE mat_release_z
 
   PURE FUNCTION mat_symmetry_d(mat) RESULT(res)
     TYPE(mat_d_obj), INTENT(IN) :: mat
@@ -204,7 +235,7 @@ CONTAINS
     TYPE(mat_d_obj), INTENT(IN) :: mat_d
     TYPE(mat_z_obj), INTENT(INOUT) :: mat_z
     CPASSERT(ASSOCIATED(mat_d%obj))
-    IF (ASSOCIATED(mat_z%obj)) CALL mat_delete(mat_z)
+    IF (ASSOCIATED(mat_z%obj)) CALL mat_release(mat_z)
     CALL mat_create(mat_z, mat_nrows(mat_d), mat_ncols(mat_d))
     mat_z%obj%p(:,:) = CMPLX(mat_d%obj%p(:,:), 0.0, KIND=dp)
     mat_z%obj%symmetry = mat_d%obj%symmetry
@@ -502,7 +533,7 @@ CONTAINS
     OPEN(UNIT_NR, file=filename)
     ! read into matrix
     READ (UNIT_NR, FMT=*) nrows, ncols
-    IF (ASSOCIATED(mat%obj)) CALL mat_delete(mat)
+    IF (ASSOCIATED(mat%obj)) CALL mat_release(mat)
     CALL mat_create(mat, nrows, ncols)
     DO ii = 1, nrows
        READ (UNIT_NR, FMT=*) mat%obj%p(ii,:)
@@ -522,7 +553,7 @@ CONTAINS
     OPEN(UNIT_NR, file=filename)
     ! read into matrix
     READ (UNIT_NR, FMT=*) nrows, ncols
-    IF (ASSOCIATED(mat%obj)) CALL mat_delete(mat)
+    IF (ASSOCIATED(mat%obj)) CALL mat_release(mat)
     CALL mat_create(mat, nrows, ncols)
     ALLOCATE(tmp(nrows,2*ncols))
     tmp = 0.0_dp
@@ -706,7 +737,7 @@ CONTAINS
     INTEGER :: nrows, ncols
     nrows = mat_nrows(A)
     ncols = mat_ncols(A)
-    IF (ASSOCIATED(B%obj)) CALL mat_delete(B)
+    IF (ASSOCIATED(B%obj)) CALL mat_release(B)
     CALL mat_create(B, mat_nrows(A), mat_ncols(A))
     CALL DLACPY('N', nrows, ncols, A%obj%p, nrows, B%obj%p, nrows)
   END SUBROUTINE mat_copy_d
@@ -717,7 +748,7 @@ CONTAINS
     INTEGER :: nrows, ncols
     nrows = mat_nrows(A)
     ncols = mat_ncols(A)
-    IF (ASSOCIATED(B%obj)) CALL mat_delete(B)
+    IF (ASSOCIATED(B%obj)) CALL mat_release(B)
     CALL mat_create(B, mat_nrows(A), mat_ncols(A))
     CALL ZLACPY('N', nrows, ncols, A%obj%p, nrows, B%obj%p, nrows)
   END SUBROUTINE mat_copy_z
