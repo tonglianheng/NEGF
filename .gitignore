@@ -1,2 +1,6 @@
 *~
 *.o
+.DS_Store
+*.mod
+test_matrix
+*.dSYM

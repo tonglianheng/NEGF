@@ -20,5 +20,9 @@ PROGRAM test_matrix
   CALL mat_mult("N", "N", 1.0_dp, HS, HS_inv, 0.0_dp, identity)
   CALL mat_write(identity)
   
+  CALL mat_inv_lu(HS, HS_inv)
+  CALL mat_write(HS_inv)
+  CALL mat_mult("N", "N", 1.0_dp, HS, HS_inv, 0.0_dp, identity)
+  CALL mat_write(identity)
 
 END PROGRAM test_matrix

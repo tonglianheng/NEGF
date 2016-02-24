@@ -20,7 +20,7 @@ MODULE negf_env_types
             negf_env_create, &
             negf_env_has_data, &
             negf_env_nullify, &
-            negf_env_get, &
+            ! negf_env_get, &
             negf_env_retain, &
             negf_env_release
 
@@ -139,46 +139,46 @@ CONTAINS
   END SUBROUTINE negf_env_nullify
 
 
-  SUBROUTINE negf_env_get(negf_env, &
-                          nterminals, &
-                          eps_E, &
-                          H_S, &
-                          S_S, &
-                          GR_S, &
-                          H_LS, &
-                          S_LS, &
-                          H_L, &
-                          S_L, &
-                          Sigma_L, &
-                          Gamma_L, &
-                          GR0_L)
-    TYPE(negf_env_obj), INTENT(INOUT) :: negf_env
-    INTEGER, INTENT(OUT), OPTIONAL :: nterminals
-    REAL(KIND=dp), INTENT(OUT), OPTIONAL :: eps_E
-    TYPE(mat_d_obj), INTENT(OUT), OPTIONAL :: H_S, S_S
-    TYPE(mat_z_obj), INTENT(OUT), OPTIONAL :: GR_S
-    TYPE(mat_d_obj), DIMENSION(:), POINTER, OPTIONAL :: H_LS, S_LS, H_L, S_L
-    TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: Sigma_L, Gamma_L
-    TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: GR0_L
+  ! SUBROUTINE negf_env_get(negf_env, &
+  !                         nterminals, &
+  !                         eps_E, &
+  !                         H_S, &
+  !                         S_S, &
+  !                         GR_S, &
+  !                         H_LS, &
+  !                         S_LS, &
+  !                         H_L, &
+  !                         S_L, &
+  !                         Sigma_L, &
+  !                         Gamma_L, &
+  !                         GR0_L)
+  !   TYPE(negf_env_obj), INTENT(INOUT) :: negf_env
+  !   INTEGER, INTENT(OUT), OPTIONAL :: nterminals
+  !   REAL(KIND=dp), INTENT(OUT), OPTIONAL :: eps_E
+  !   TYPE(mat_d_obj), INTENT(OUT), OPTIONAL :: H_S, S_S
+  !   TYPE(mat_z_obj), INTENT(OUT), OPTIONAL :: GR_S
+  !   TYPE(mat_d_obj), DIMENSION(:), POINTER, OPTIONAL :: H_LS, S_LS, H_L, S_L
+  !   TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: Sigma_L, Gamma_L
+  !   TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: GR0_L
 
-    CHARACTER(len=*), PARAMETER :: routineN = 'negf_env_get', &
-                                   routineP = moduleN//':'//routineN
+  !   CHARACTER(len=*), PARAMETER :: routineN = 'negf_env_get', &
+  !                                  routineP = moduleN//':'//routineN
     
-    IF (PRESENT(nterminals)) nterminals = negf_env%obj%nterminals
-    IF (PRESENT(eps_E)) eps_E = negf_env%obj%eps_E
+  !   IF (PRESENT(nterminals)) nterminals = negf_env%obj%nterminals
+  !   IF (PRESENT(eps_E)) eps_E = negf_env%obj%eps_E
 
-    IF (PRESENT(H_S)) H_S%p => negf_env%obj%H_S%p
-    IF (PRESENT(S_S)) S_S%p => negf_env%obj%S_S%p
-    IF (PRESENT(GR_S)) GR_S%p => negf_env%obj%GR_S%p
+  !   IF (PRESENT(H_S)) H_S%p => negf_env%obj%H_S%p
+  !   IF (PRESENT(S_S)) S_S%p => negf_env%obj%S_S%p
+  !   IF (PRESENT(GR_S)) GR_S%p => negf_env%obj%GR_S%p
 
-    IF (PRESENT(H_LS)) H_LS => negf_env%obj%H_LS
-    IF (PRESENT(S_LS)) S_LS => negf_env%obj%S_LS 
-    IF (PRESENT(H_L)) H_L => negf_env%obj%H_L
-    IF (PRESENT(S_L)) S_L => negf_env%obj%S_L
-    IF (PRESENT(Sigma_L)) Sigma_L => negf_env%obj%Sigma_L
-    IF (PRESENT(Gamma_L)) Gamma_L => negf_env%obj%Gamma_L
-    IF (PRESENT(GR0_L)) GR0_L => negf_env%obj%GR0_L
-  END SUBROUTINE negf_env_get
+  !   IF (PRESENT(H_LS)) H_LS => negf_env%obj%H_LS
+  !   IF (PRESENT(S_LS)) S_LS => negf_env%obj%S_LS 
+  !   IF (PRESENT(H_L)) H_L => negf_env%obj%H_L
+  !   IF (PRESENT(S_L)) S_L => negf_env%obj%S_L
+  !   IF (PRESENT(Sigma_L)) Sigma_L => negf_env%obj%Sigma_L
+  !   IF (PRESENT(Gamma_L)) Gamma_L => negf_env%obj%Gamma_L
+  !   IF (PRESENT(GR0_L)) GR0_L => negf_env%obj%GR0_L
+  ! END SUBROUTINE negf_env_get
 
 
   SUBROUTINE negf_env_retain(negf_env)
