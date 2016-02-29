@@ -70,6 +70,11 @@ MODULE matrix_types
      MODULE PROCEDURE mat_create_z
   END INTERFACE mat_create
 
+  INTERFACE mat_retain
+     MODULE PROCEDURE mat_retain_d
+     MODULE PROCEDURE mat_retain_z
+  END INTERFACE mat_retain
+
   INTERFACE mat_release
      MODULE PROCEDURE mat_release_d
      MODULE PROCEDURE mat_release_z
@@ -129,6 +134,11 @@ MODULE matrix_types
      MODULE PROCEDURE mat_copy_d
      MODULE PROCEDURE mat_copy_z
   END INTERFACE mat_copy
+
+  INTERFACE mat_associate
+     MODULE PROCEDURE mat_associate_d
+     MODULE PROCEDURE mat_associate_z
+  END INTERFACE mat_associate
 
   INTERFACE mat_norm_d
      MODULE PROCEDURE mat_norm_d
@@ -359,7 +369,6 @@ CONTAINS
                alpha, A%obj%p, nrows_A, B%obj%p, ncols_A, &
                beta, C%obj%p, nrows_A)
   END SUBROUTINE mat_mult_z
-
 
   SUBROUTINE mat_inv_cholesky_d(mat, inv)
     ! uses DPOTRF and DPOTRI for inversion using Cholesky
@@ -753,6 +762,22 @@ CONTAINS
     CALL ZLACPY('N', nrows, ncols, A%obj%p, nrows, B%obj%p, nrows)
   END SUBROUTINE mat_copy_z
 
+  SUBROUTINE mat_associate_d(A, B)
+    TYPE(mat_d_obj), INTENT(IN) :: A
+    TYPE(mat_d_obj), INTENT(INOUT) :: B
+    CALL mat_release(B)
+    B%obj => A%obj
+    CALL mat_retain(B)
+  END SUBROUTINE mat_associate_d
+
+  SUBROUTINE mat_associate_z(A, B)
+    TYPE(mat_z_obj), INTENT(IN) :: A
+    TYPE(mat_z_obj), INTENT(INOUT) :: B
+    CALL mat_release(B)
+    B%obj => A%obj
+    CALL mat_retain(B)
+  END SUBROUTINE mat_associate_z
+
   FUNCTION mat_norm_d(mat) RESULT(res)
     TYPE(mat_d_obj), INTENT(IN) :: mat
     REAL(KIND=dp) :: res
@@ -774,6 +799,7 @@ CONTAINS
     ! work is a dummy for Frobenius norm
     res = DLANGE('F', nrows, ncols, mat%obj%p, nrows, work)
   END FUNCTION mat_norm_z
+
 
 
 END MODULE matrix_types
