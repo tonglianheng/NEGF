@@ -19,20 +19,23 @@ MODULE matrix_types
             MAT_HERMITIAN
 
   ! public methods
-  PUBLIC :: mat_create,&
-            mat_release, &
-            mat_symmetry, &
-            mat_real_to_complex, &
-            mat_mult, &
+  PUBLIC :: is_same_obj, &
+            mat_associate, &
+            mat_axpy, &
+            mat_copy, &
+            mat_create, &
             mat_inv_cholesky, &
             mat_inv_lu, &
-            mat_read, &
-            mat_write, &
-            mat_nrows, &
+            mat_mult, &
             mat_ncols, &
-            mat_axpy, &
-            mat_zero, &
-            mat_copy
+            mat_norm, &
+            mat_nrows, &
+            mat_read, &
+            mat_real_to_complex, &
+            mat_release, &
+            mat_symmetry, &
+            mat_write, &
+            mat_zero
 
   CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'matrix_types'
   INTEGER, PRIVATE, SAVE :: last_mat_id = 0
@@ -43,7 +46,7 @@ MODULE matrix_types
                         MAT_HERMITIAN = 2
 
   ! lapack function declarations
-  REAL(KIND=dp), EXTERNAL :: DLANGE
+  REAL(KIND=dp), EXTERNAL :: DLANGE, ZLANGE
 
   TYPE mat_d_data
      REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: p
@@ -79,6 +82,16 @@ MODULE matrix_types
      MODULE PROCEDURE mat_release_d
      MODULE PROCEDURE mat_release_z
   END INTERFACE mat_release
+
+  INTERFACE mat_associate
+     MODULE PROCEDURE mat_associate_d
+     MODULE PROCEDURE mat_associate_z
+  END INTERFACE mat_associate
+
+  INTERFACE mat_copy
+     MODULE PROCEDURE mat_copy_d
+     MODULE PROCEDURE mat_copy_z
+  END INTERFACE mat_copy
 
   INTERFACE mat_symmetry
      MODULE PROCEDURE mat_symmetry_d
@@ -130,20 +143,15 @@ MODULE matrix_types
      MODULE PROCEDURE mat_zero_z
   END INTERFACE mat_zero
 
-  INTERFACE mat_copy
-     MODULE PROCEDURE mat_copy_d
-     MODULE PROCEDURE mat_copy_z
-  END INTERFACE mat_copy
-
-  INTERFACE mat_associate
-     MODULE PROCEDURE mat_associate_d
-     MODULE PROCEDURE mat_associate_z
-  END INTERFACE mat_associate
-
-  INTERFACE mat_norm_d
+  INTERFACE mat_norm
      MODULE PROCEDURE mat_norm_d
      MODULE PROCEDURE mat_norm_z
-  END INTERFACE mat_norm_d
+  END INTERFACE mat_norm
+
+  INTERFACE is_same_obj
+     MODULE PROCEDURE is_same_obj_d
+     MODULE PROCEDURE is_same_obj_z
+  END INTERFACE is_same_obj
 
 CONTAINS
 
@@ -159,18 +167,25 @@ CONTAINS
     mat%obj%ref_count = mat%obj%ref_count + 1
   END SUBROUTINE mat_retain_z
 
-  SUBROUTINE mat_create_d(mat, nrows, ncols, symmetry)
+  SUBROUTINE mat_create_d(mat, nrows, ncols, symmetry, content)
     TYPE(mat_d_obj), INTENT(INOUT) :: mat
-    INTEGER, OPTIONAL :: symmetry
     INTEGER, INTENT(IN) :: nrows, ncols
+    INTEGER, OPTIONAL :: symmetry
+    REAL(KIND=dp), DIMENSION(:,:), INTENT(IN), OPTIONAL :: content
     CPASSERT(.NOT. ASSOCIATED(mat%obj))
     ALLOCATE(mat%obj)
     ALLOCATE(mat%obj%p(nrows,ncols))
-    mat%obj%p = 0.0_dp
     IF (PRESENT(symmetry)) THEN
        mat%obj%symmetry = symmetry
     ELSE
        mat%obj%symmetry = MAT_GENERAL
+    END IF
+    IF (PRESENT(content)) THEN
+       CPASSERT(SIZE(content,1) .EQ. nrows)
+       CPASSERT(SIZE(content,2) .EQ. ncols)
+       mat%obj%p = content
+    ELSE
+       mat%obj%p = 0.0_dp
     END IF
     mat%obj%ref_count = 1
     ! book keeping
@@ -178,18 +193,25 @@ CONTAINS
     last_mat_id = mat%obj%id_nr
   END SUBROUTINE mat_create_d
 
-  SUBROUTINE mat_create_z(mat, nrows, ncols, symmetry)
+  SUBROUTINE mat_create_z(mat, nrows, ncols, symmetry, content)
     TYPE(mat_z_obj), INTENT(INOUT) :: mat
-    INTEGER, OPTIONAL :: symmetry
     INTEGER, INTENT(IN) :: nrows, ncols
+    INTEGER, OPTIONAL :: symmetry
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(IN), OPTIONAL :: content
     CPASSERT(.NOT. ASSOCIATED(mat%obj))
     ALLOCATE(mat%obj)
     ALLOCATE(mat%obj%p(nrows,ncols))
-    mat%obj%p = (0.0_dp,0.0_dp)
     IF (PRESENT(symmetry)) THEN
        mat%obj%symmetry = symmetry
     ELSE
        mat%obj%symmetry = MAT_GENERAL
+    END IF
+    IF (PRESENT(content)) THEN
+       CPASSERT(SIZE(content,1) .EQ. nrows)
+       CPASSERT(SIZE(content,2) .EQ. ncols)
+       mat%obj%p = content
+    ELSE
+       mat%obj%p = (0.0_dp,0.0_dp)
     END IF
     mat%obj%ref_count = 1
     ! book keeping
@@ -261,6 +283,9 @@ CONTAINS
   !   LOGICAL :: do_symm
   !   INTEGER :: ii, jj
 
+  !   CPASSERT(.NOT. is_same_obj(A,C))
+  !   CPASSERT(.NOT. is_same_obj(B,C))
+
   !   nrows_A = mat_nrows(A)
   !   ncols_A = mat_ncols(A)
   !   ncols_B = mat_ncols(B)
@@ -328,6 +353,9 @@ CONTAINS
 
     INTEGER :: nrows_A, ncols_A, ncols_B
 
+    CPASSERT(.NOT. is_same_obj(A,C))
+    CPASSERT(.NOT. is_same_obj(B,C))
+
     nrows_A = mat_nrows(A)
     ncols_A = mat_ncols(A)
     ncols_B = mat_ncols(B)
@@ -352,6 +380,9 @@ CONTAINS
     COMPLEX(KIND=dp), INTENT(IN) :: alpha, beta
 
     INTEGER :: nrows_A, ncols_A, ncols_B
+
+    CPASSERT(.NOT. is_same_obj(A,C))
+    CPASSERT(.NOT. is_same_obj(B,C))
 
     nrows_A = mat_nrows(A)
     ncols_A = mat_ncols(A)
@@ -379,6 +410,7 @@ CONTAINS
     INTEGER :: ii, jj, nrows, info
     CHARACTER(LEN=6) :: info_string
 
+    CPASSERT(.NOT. is_same_obj(mat,inv))
     nrows = mat_nrows(mat)
     CPASSERT(mat_ncols(mat) .EQ. nrows)
 
@@ -420,6 +452,7 @@ CONTAINS
     INTEGER :: ii, jj, nrows, info
     CHARACTER(LEN=6) :: info_string
 
+    CPASSERT(.NOT. is_same_obj(mat,inv))
     nrows = mat_nrows(mat)
     CPASSERT(mat_ncols(mat) .EQ. nrows)
 
@@ -460,6 +493,7 @@ CONTAINS
     INTEGER, DIMENSION(:), ALLOCATABLE :: ipiv
     CHARACTER(LEN=6) :: info_string
     REAL(KIND=dp), DIMENSION(:), ALLOCATABLE :: work
+    CPASSERT(.NOT. is_same_obj(mat,inv))
     nrows = mat_nrows(mat)
     IF (ASSOCIATED(inv%obj)) THEN
        CPASSERT(mat_nrows(inv) .EQ. nrows)
@@ -500,6 +534,7 @@ CONTAINS
     INTEGER, DIMENSION(:), ALLOCATABLE :: ipiv
     CHARACTER(LEN=6) :: info_string
     COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE :: work
+    CPASSERT(.NOT. is_same_obj(mat,inv))
     nrows = mat_nrows(mat)
     IF (ASSOCIATED(inv%obj)) THEN
        CPASSERT(mat_nrows(inv) .EQ. nrows)
@@ -599,7 +634,7 @@ CONTAINS
     WRITE (my_unit_nr, FMT="(2I6)") nrows, ncols
     DO ii = 1, nrows
        DO jj = 1, ncols
-          WRITE (my_unit_nr, FMT="(F10.7,2X)", ADVANCE="no") mat%obj%p(ii,jj)
+          WRITE (my_unit_nr, FMT="(F12.7,2X)", ADVANCE="no") mat%obj%p(ii,jj)
        END DO
        WRITE (my_unit_nr, *) ""
     END DO
@@ -629,7 +664,7 @@ CONTAINS
     WRITE (my_unit_nr, FMT="(2I6)") nrows, ncols
     DO ii = 1, nrows
        DO jj = 1, ncols
-          WRITE (my_unit_nr, FMT="(F10.7,1X,F10.7,3X)", ADVANCE="no") mat%obj%p(ii,jj)
+          WRITE (my_unit_nr, FMT="(F12.7,1X,F12.7,3X)", ADVANCE="no") mat%obj%p(ii,jj)
        END DO
        WRITE (my_unit_nr, *) ""
     END DO
@@ -671,6 +706,7 @@ CONTAINS
     TYPE(mat_d_obj), INTENT(INOUT) :: Y
 
     INTEGER :: ii, jj, nrows, ncols
+    CPASSERT(.NOT. is_same_obj(X,Y))
     nrows = mat_nrows(Y)
     ncols = mat_ncols(Y)
     IF (transX .EQ. 'T') THEN
@@ -696,6 +732,7 @@ CONTAINS
     TYPE(mat_z_obj), INTENT(INOUT) :: Y
 
     INTEGER :: ii, jj, nrows, ncols
+    CPASSERT(.NOT. is_same_obj(X,Y))
     nrows = mat_nrows(Y)
     ncols = mat_ncols(Y)
     SELECT CASE (transX)
@@ -791,15 +828,35 @@ CONTAINS
 
   FUNCTION mat_norm_z(mat) RESULT(res)
     TYPE(mat_z_obj), INTENT(IN) :: mat
-    COMPLEX(KIND=dp) :: res
+    REAL(KIND=dp) :: res
     INTEGER :: nrows, ncols
     COMPLEX(KIND=dp), DIMENSION(1) :: work
     nrows = mat_nrows(mat)
     ncols = mat_ncols(mat)
     ! work is a dummy for Frobenius norm
-    res = DLANGE('F', nrows, ncols, mat%obj%p, nrows, work)
+    res = ZLANGE('F', nrows, ncols, mat%obj%p, nrows, work)
   END FUNCTION mat_norm_z
 
+  FUNCTION is_same_obj_d(A, B) RESULT(res)
+    TYPE(mat_d_obj), INTENT(IN) :: A, B
+    LOGICAL :: res
+    res = .FALSE.
+    IF (ASSOCIATED(A%obj) .AND. ASSOCIATED(B%obj)) THEN
+       IF (A%obj%id_nr .EQ. B%obj%id_nr) THEN
+          res = .TRUE.
+       END IF
+    END IF
+  END FUNCTION is_same_obj_d
 
+  FUNCTION is_same_obj_z(A, B) RESULT(res)
+    TYPE(mat_z_obj), INTENT(IN) :: A, B
+    LOGICAL :: res
+    res = .FALSE.
+    IF (ASSOCIATED(A%obj) .AND. ASSOCIATED(B%obj)) THEN
+       IF (A%obj%id_nr .EQ. B%obj%id_nr) THEN
+          res = .TRUE.
+       END IF
+    END IF
+  END FUNCTION is_same_obj_z
 
 END MODULE matrix_types

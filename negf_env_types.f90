@@ -4,7 +4,7 @@ MODULE negf_env_types
   USE matrix_types, ONLY: mat_d_obj, &
                           mat_z_obj, &
                           mat_create, &
-                          mat_delete
+                          mat_release
 
 #include "./base/base_uses.f90"
 
@@ -204,42 +204,42 @@ CONTAINS
        negf_env%obj%ref_count = negf_env%obj%ref_count - 1
        IF (negf_env%obj%ref_count .EQ. 0) THEN
           negf_env%obj%ref_count = 1
-          CALL mat_delete(negf_env%obj%H_S)
-          CALL mat_delete(negf_env%obj%S_S)
-          CALL mat_delete(negf_env%obj%GR_S)
+          CALL mat_release(negf_env%obj%H_S)
+          CALL mat_release(negf_env%obj%S_S)
+          CALL mat_release(negf_env%obj%GR_S)
           IF (ASSOCIATED(negf_env%obj%H_LS)) THEN
              DO ii = 1, SIZE(negf_env%obj%H_LS)
-                CALL mat_delete(negf_env%obj%H_LS(ii))
+                CALL mat_release(negf_env%obj%H_LS(ii))
              END DO
           END IF
           IF (ASSOCIATED(negf_env%obj%H_L)) THEN
              DO ii = 1, SIZE(negf_env%obj%H_L)
-                CALL mat_delete(negf_env%obj%H_L(ii))
+                CALL mat_release(negf_env%obj%H_L(ii))
              END DO
           END IF
           IF (ASSOCIATED(negf_env%obj%S_LS)) THEN
              DO ii = 1, SIZE(negf_env%obj%S_LS)
-                CALL mat_delete(negf_env%obj%S_LS(ii))
+                CALL mat_release(negf_env%obj%S_LS(ii))
              END DO
           END IF
           IF (ASSOCIATED(negf_env%obj%S_L)) THEN
              DO ii = 1, SIZE(negf_env%obj%S_L)
-                CALL mat_delete(negf_env%obj%S_L(ii))
+                CALL mat_release(negf_env%obj%S_L(ii))
              END DO
           END IF
           IF (ASSOCIATED(negf_env%obj%Sigma_L)) THEN
              DO ii = 1, SIZE(negf_env%obj%Sigma_L)
-                CALL mat_delete(negf_env%obj%Sigma_L(ii))
+                CALL mat_release(negf_env%obj%Sigma_L(ii))
              END DO
           END IF
           IF (ASSOCIATED(negf_env%obj%Gamma_L)) THEN
              DO ii = 1, SIZE(negf_env%obj%Gamma_L)
-                CALL mat_delete(negf_env%obj%Gamma_L(ii))
+                CALL mat_release(negf_env%obj%Gamma_L(ii))
              END DO
           END IF
           IF (ASSOCIATED(negf_env%obj%GR0_L)) THEN
              DO ii = 1, SIZE(negf_env%obj%GR0_L)
-                CALL mat_delete(negf_env%obj%GR0_L(ii))
+                CALL mat_release(negf_env%obj%GR0_L(ii))
              END DO
           END IF
           negf_env%obj%ref_count = 0
