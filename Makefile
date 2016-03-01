@@ -8,7 +8,8 @@ OBJS =	matrix_types.o negf_env_types.o test_matrix.o \
 	base/base_hooks.o base/kinds.o base/machine.o \
 	base/machine_internal.o test_utils.o
 
-LIBS = -framework Accelerate
+# LIBS = -framework Accelerate
+LIBS = -L$(OPENBLAS_LIB) -lopenblas
 
 CC = gcc
 CFLAGS = -cpp -g 
