@@ -23,8 +23,7 @@ PROGRAM test_matrix
   TYPE(mat_z_obj) :: zidentity, ztmp
 
   ! initialise test utilities
-!  CALL test_init(tol=1.E-15_dp)
-  CALL test_init()
+  CALL test_init(tol=1.E-10_dp)
 
   ! constructing a positive definite matrix for mat1_data
   CALL RANDOM_SEED()
