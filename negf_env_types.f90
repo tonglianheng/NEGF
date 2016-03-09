@@ -307,7 +307,7 @@ CONTAINS
   SUBROUTINE calc_transmission(negf_env, energy, transmission, GRetarded)
     TYPE(negf_env_obj), INTENT(IN) :: negf_env
     REAL(KIND=dp), INTENT(IN) :: energy
-    TYPE(mat_z_obj), INTENT(INOUT) :: transmission
+    REAL(KIND=dp), INTENT(OUT) :: transmission
     TYPE(mat_z_obj), INTENT(INOUT) :: GRetarded
 
     CHARACTER(len=*), PARAMETER :: routineN = 'calc_scatter_GR', &
@@ -331,8 +331,8 @@ CONTAINS
     CALL mat_axpy(EE, 'N', negf_env%obj%S_S, work)
     CALL mat_inv_LU(work, GRetarded)
 
-    ! calculate transmission coefficien
-    t
+    ! calculate transmission coefficient
+    
 
   END SUBROUTINE calc_transmission
 
