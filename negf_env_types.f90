@@ -241,7 +241,6 @@ CONTAINS
     END IF
   END SUBROUTINE negf_env_release
 
-
   SUBROUTINE calc_lead_SE(negf_env, energy, iLead, Sigma)
     TYPE(negf_env_obj), INTENT(IN) :: negf_env
     REAL(KIND=dp), INTENT(IN) :: energy
