@@ -35,6 +35,7 @@ MODULE matrix_types
             mat_release, &
             mat_scale, &
             mat_symmetry, &
+            mat_trace, &
             mat_write, &
             mat_zero
 
@@ -158,6 +159,11 @@ MODULE matrix_types
      MODULE PROCEDURE is_same_obj_d
      MODULE PROCEDURE is_same_obj_z
   END INTERFACE is_same_obj
+
+  INTERFACE mat_trace
+     MODULE PROCEDURE mat_trace_d
+     MODULE PROCEDURE mat_trace_z
+  END INTERFACE mat_trace
 
 CONTAINS
 
@@ -876,5 +882,29 @@ CONTAINS
        END IF
     END IF
   END FUNCTION is_same_obj_z
+
+  FUNCTION mat_trace_d(mat) RESULT(res)
+    TYPE(mat_d_obj), INTENT(IN) :: mat
+    REAL(KIND=dp) :: res
+    INTEGER :: ii
+    CPASSERT(ASSOCIATED(mat%obj))
+    CPASSERT(ALLOCATED(mat%obj%p))
+    res = 0.0_dp
+    DO ii = 1, mat_nrows(mat)
+       res = res + mat%obj%p(ii,ii)
+    END DO
+  END FUNCTION mat_trace_d
+
+  FUNCTION mat_trace_z(mat) RESULT(res)
+    TYPE(mat_z_obj), INTENT(IN) :: mat
+    COMPLEX(KIND=dp) :: res
+    INTEGER :: ii
+    CPASSERT(ASSOCIATED(mat%obj))
+    CPASSERT(ALLOCATED(mat%obj%p))
+    res = 0.0_dp
+    DO ii = 1, mat_nrows(mat)
+       res = res + mat%obj%p(ii,ii)
+    END DO
+  END FUNCTION mat_trace_z
 
 END MODULE matrix_types

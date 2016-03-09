@@ -11,7 +11,7 @@ PROGRAM test_matrix
   INTEGER, PARAMETER :: N1 = 4, &
                         N2 = 4, &
                         M2 = 3
-  REAL(KIND=dp) :: norm2
+  REAL(KIND=dp) :: norm2, trace
   REAL(KIND=dp), DIMENSION(N1,N1) :: eigvectors, mat1_diag, mat1_identity
   REAL(KIND=dp), DIMENSION(N1,N1) :: mat1_data, tmp1_data
   REAL(KIND=dp), DIMENSION(N2,M2) :: mat2_data
@@ -39,6 +39,10 @@ PROGRAM test_matrix
   CALL DGEMM('N', 'N', N1, N1, N1, &
              1.0_dp, eigvectors, N1, tmp1_data, N1, &
              0.0_dp, mat1_data, N1)
+  trace = 0.0_dp
+  DO ii = 1, N1
+     trace = trace + mat1_data(ii,ii)
+  END DO
 
   ! constructing an identity matrix compatible with mat1_data
   mat1_identity = 0.0_dp
@@ -178,6 +182,12 @@ PROGRAM test_matrix
   CALL mat_axpy(-1.0_dp, 'N', identity, tmp)
   CALL check_pass(mat_norm(tmp), 0.0_dp)
 
+  WRITE (*,*) "==================== check trace ===================="
+  CALL mat_write(mat1)
+  WRITE (*,*) "calculated trace = ", mat_trace(mat1)
+  WRITE (*,*) "correct trace = ", trace
+  CALL check_pass(mat_trace(mat1), trace)
+
   ! ------------------------------------------------------------------------
   ! Complex Tests
   ! ------------------------------------------------------------------------
@@ -281,6 +291,12 @@ PROGRAM test_matrix
   CALL mat_create(ztmp, N1, N1, content=zmat1_identity)
   CALL mat_axpy((-1.0_dp,0.0_dp), 'N', zidentity, ztmp)
   CALL check_pass(mat_norm(ztmp), 0.0_dp)
+
+  WRITE (*,*) "==================== check trace ===================="
+  CALL mat_write(zmat1)
+  WRITE (*,*) "calculated trace = ", mat_trace(zmat1)
+  WRITE (*,*) "correct trace = ", CMPLX(trace,0.0_dp,KIND=dp)
+  CALL check_pass(mat_trace(zmat1), CMPLX(trace,0.0_dp,KIND=dp))
 
   ! finish tests
   CALL test_finalise()
