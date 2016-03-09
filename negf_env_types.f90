@@ -259,7 +259,7 @@ CONTAINS
     CALL mat_create(Sigma, &
                     mat_ncols(negf_env%obj%H_LS(iLead)), &
                     mat_ncols(negf_env%obj%H_LS(iLead)))
-    EE = CMPLX(energy, negf_env%obj%eps_E)
+    EE = CMPLX(energy, negf_env%obj%eps_E, KIND=dp)
     CALL surface_GR_sancho(GR_lead_surface, &
                            EE, &
                            negf_env%obj%H_L_onsite(iLead), &
@@ -285,13 +285,12 @@ CONTAINS
     CALL mat_release(GR_lead_surface)
   END SUBROUTINE calc_lead_SE
 
-  SUBROUTINE calc_lead_gamma(negf_env, iLead, Sigma, Gamma)
-    TYPE(negf_env_obj), INTENT(IN) :: negf_env
-    INTEGER, INTENT(IN) :: iLead
+  SUBROUTINE calc_lead_gamma(negf_env, Sigma, Gamma)
+    TYPE(negf_env_obj), INTENT(IN) :: negf_en
     TYPE(mat_z_obj), INTENT(IN) :: Sigma
     TYPE(mat_z_obj), INTENT(INOUT) :: Gamma
 
-    CHARACTER(len=*), PARAMETER :: routineN = 'calc_lead_Gamma', &
+    CHARACTER(len=*), PARAMETER :: routineN = 'calc_lead_gamma', &
                                    routineP = moduleN//':'//routineN
 
     TYPE(mat_z_obj) :: Sigma
@@ -314,26 +313,42 @@ CONTAINS
                                    routineP = moduleN//':'//routineN
 
     TYPE(mat_z_obj), DIMENSION(:), ALLOCATABLE :: Sigma
-    TYPE(mat_z_obj) :: work
+    TYPE(mat_z_obj) :: work1, work2, Gamma
     INTEGER :: ii
     COMPLEX(KIND=dp) :: EE
 
     ! calculate retarded Green function
     CALL mat_release(GRetarded)
-    EE = CMPLX(energy, negf_env%obj%eps_E)
+    EE = CMPLX(energy, negf_env%obj%eps_E, KIND=dp)
     ALLOCATE(Sigma(negf_env%obj%nterminals))
-    CALL mat_real_to_complex(negf_env%H_S, work)
-    CALL mat_scale(work, (-1.0_dp,0.0_dp))
-    DO ii = 1, nterminals
+    CALL mat_real_to_complex(negf_env%H_S, work1)
+    CALL mat_scale(work1, (-1.0_dp,0.0_dp))
+    DO ii = 1, negf_env%obj%nterminals
        CALL calc_lead_SE(negf_env, energy, ii, Sigma(ii))
-       CALL mat_axpy((-1.0_dp,0.0_dp), 'N', Sigma(ii), work)
+       CALL mat_axpy((-1.0_dp,0.0_dp), 'N', Sigma(ii), work1)
     END DO
-    CALL mat_axpy(EE, 'N', negf_env%obj%S_S, work)
+    CALL mat_axpy(EE, 'N', negf_env%obj%S_S, work1)
     CALL mat_inv_LU(work, GRetarded)
 
     ! calculate transmission coefficient
-    
+    CALL mat_create(work2, mat_nrows(work1), mat_ncols(work1))
+    CALL calc_lead_gamma(negf_env, Sigma(1), Gamma)
+    CALL mat_mult('N', 'N', (1.0_dp,0.0_dp), Gamma, GRetarded, &
+                  (0.0_dp,0.0_dp), work1)
+    CALL calc_lead_gamma(negf_env, Sigma(2), Gamma)
+    CALL mat_mult('N', 'N', (1.0_dp,0.0_dp), work1, Gamma, &
+                  (0.0_dp,0.0_dp), work2)
+    CALL mat_mult('N', 'H', (1.0_dp,0.0_dp), work2, GRetarded, &
+                  (0.0_dp,0.0_dp), work1)
+    transmission = mat_trace(work1)
 
+    ! cleanup
+    CALL mat_release(work1)
+    CALL mat_release(work2)
+    DO ii = 1, SIZE(Sigma)
+       CALL mat_release(Sigma(ii))
+    END DO
+    DEALLOCATE(Sigma)
   END SUBROUTINE calc_transmission
 
 END MODULE negf_env_types
