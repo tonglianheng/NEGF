@@ -33,6 +33,7 @@ MODULE matrix_types
             mat_read, &
             mat_real_to_complex, &
             mat_release, &
+            mat_scale, &
             mat_symmetry, &
             mat_write, &
             mat_zero
@@ -92,6 +93,11 @@ MODULE matrix_types
      MODULE PROCEDURE mat_copy_d
      MODULE PROCEDURE mat_copy_z
   END INTERFACE mat_copy
+
+  INTERFACE mat_scale
+     MODULE PROCEDURE mat_scale_d
+     MODULE PROCEDURE mat_scale_z
+  END INTERFACE mat_scale
 
   INTERFACE mat_symmetry
      MODULE PROCEDURE mat_symmetry_d
@@ -798,6 +804,18 @@ CONTAINS
     CALL mat_create(B, mat_nrows(A), mat_ncols(A))
     CALL ZLACPY('N', nrows, ncols, A%obj%p, nrows, B%obj%p, nrows)
   END SUBROUTINE mat_copy_z
+
+  SUBROUTINE mat_scale_d(mat, scalar)
+    TYPE(mat_d_obj), INTENT(INOUT) :: mat
+    REAL(KIND=dp), INTENT(IN) :: scalar
+    mat%obj%p = scalar * mat%obj%p
+  END SUBROUTINE mat_scale_d
+
+  SUBROUTINE mat_scale_z(mat, scalar)
+    TYPE(mat_z_obj), INTENT(INOUT) :: mat
+    COMPLEX(KIND=dp), INTENT(IN) :: scalar
+    mat%obj%p = scalar * mat%obj%p
+  END SUBROUTINE mat_scale_z
 
   SUBROUTINE mat_associate_d(A, B)
     TYPE(mat_d_obj), INTENT(IN) :: A
