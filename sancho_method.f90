@@ -7,7 +7,12 @@ MODULE sancho_method
                           mat_norm, &
                           mat_copy, &
                           mat_create, &
-                          mat_release
+                          mat_release, &
+                          mat_nrows, &
+                          mat_ncols, &
+                          mat_axpy, &
+                          mat_mult, &
+                          mat_real_to_complex
 
 #include "./base/base_uses.f90"
 
@@ -53,7 +58,7 @@ CONTAINS
 
     CALL mat_create(A, mat_nrows(St), mat_ncols(St))
     CALL mat_axpy((-1.0_dp,0.0_dp), "N", Ht, A)
-    CALL mat_axpy(energy, "N", St, ESt_m_Ht)
+    CALL mat_axpy(energy, "N", St, A)
 
     CALL mat_create(B, mat_ncols(St), mat_nrows(St))
     CALL mat_axpy((-1.0_dp,0.0_dp), "H", Ht, B)
@@ -101,6 +106,6 @@ CONTAINS
     CALL mat_release(GR_surface_A)
     CALL mat_release(GR_surface_B)
     CALL mat_release(B_copy)
-  END SUBROUTINE surface_G0_sancho
+  END SUBROUTINE surface_GR_sancho
 
 END MODULE sancho_method
