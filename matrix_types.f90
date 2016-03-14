@@ -756,7 +756,7 @@ CONTAINS
                 Y%obj%p(ii,jj) = a * X%obj%p(jj,ii) + Y%obj%p(ii,jj)
              END DO
           END DO
-       CASE ('H')
+       CASE ('C')
           CPASSERT(mat_nrows(X) .EQ. ncols)
           CPASSERT(mat_ncols(X) .EQ. nrows)
           DO jj = 1, ncols
@@ -861,7 +861,7 @@ CONTAINS
     res = ZLANGE('F', nrows, ncols, mat%obj%p, nrows, work)
   END FUNCTION mat_norm_z
 
-  FUNCTION is_same_obj_d(A, B) RESULT(res)
+  PURE FUNCTION is_same_obj_d(A, B) RESULT(res)
     TYPE(mat_d_obj), INTENT(IN) :: A, B
     LOGICAL :: res
     res = .FALSE.

@@ -276,7 +276,7 @@ CONTAINS
                     mat_ncols(work1))
     CALL mat_mult('N', 'N', (1.0_dp,0.0_dp), &
                   GR_lead_surface, work1, work2)
-    CALL mat_mult('H', 'N', (1.0_dp,0.0_dp), &
+    CALL mat_mult('C', 'N', (1.0_dp,0.0_dp), &
                   work1, work2, Sigma)
     ! cleanup
     CALL mat_release(work1)
