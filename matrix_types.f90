@@ -32,6 +32,9 @@ MODULE matrix_types
             mat_nrows, &
             mat_read, &
             mat_real_to_complex, &
+            mat_CMPLX,&            
+            mat_real,&
+            mat_imag,&            
             mat_release, &
             mat_scale, &
             mat_symmetry, &
@@ -284,6 +287,38 @@ CONTAINS
     mat_z%obj%p(:,:) = CMPLX(mat_d%obj%p(:,:), 0.0, KIND=dp)
     mat_z%obj%symmetry = mat_d%obj%symmetry
   END SUBROUTINE mat_real_to_complex
+
+  SUBROUTINE mat_real(mat_z, mat_d)
+    TYPE(mat_d_obj), INTENT(INOUT) :: mat_d
+    TYPE(mat_z_obj), INTENT(IN) :: mat_z
+    CPASSERT(ASSOCIATED(mat_z%obj))
+    IF (ASSOCIATED(mat_d%obj)) CALL mat_release(mat_d)
+    CALL mat_create(mat_d, mat_nrows(mat_z), mat_ncols(mat_z))
+    mat_d%obj%p(:,:) = REAL(mat_z%obj%p(:,:),KIND=dp)
+    mat_d%obj%symmetry = mat_z%obj%symmetry
+  END SUBROUTINE mat_real
+
+  SUBROUTINE mat_imag(mat_z, mat_d)
+    TYPE(mat_d_obj), INTENT(INOUT) :: mat_d
+    TYPE(mat_z_obj), INTENT(IN) :: mat_z
+    CPASSERT(ASSOCIATED(mat_z%obj))
+    IF (ASSOCIATED(mat_d%obj)) CALL mat_release(mat_d)
+    CALL mat_create(mat_d, mat_nrows(mat_z), mat_ncols(mat_z))
+    mat_d%obj%p(:,:) = REAL(AIMAG (mat_z%obj%p(:,:)),KIND=dp)
+    mat_d%obj%symmetry = mat_z%obj%symmetry
+  END SUBROUTINE mat_imag
+
+  SUBROUTINE mat_CMPLX(mat_d, mat_d1, mat_z)
+    TYPE(mat_d_obj), INTENT(IN) :: mat_d
+    TYPE(mat_d_obj), INTENT(IN) :: mat_d1
+    TYPE(mat_z_obj), INTENT(INOUT) :: mat_z
+    CPASSERT(ASSOCIATED(mat_d%obj))
+    CPASSERT(ASSOCIATED(mat_d1%obj))
+    IF (ASSOCIATED(mat_z%obj)) CALL mat_release(mat_z)
+    CALL mat_create(mat_z, mat_nrows(mat_d), mat_ncols(mat_d))
+    mat_z%obj%p(:,:) = CMPLX(mat_d%obj%p(:,:), mat_d1%obj%p(:,:), KIND = dp)
+    mat_z%obj%symmetry = mat_d%obj%symmetry
+  END SUBROUTINE mat_CMPLX
 
   ! SUBROUTINE mat_mult_d(transA, transB, alpha, A, B, beta, C)
   !   TYPE(mat_d_obj), INTENT(IN) :: A, B
