@@ -19,7 +19,7 @@ MODULE sancho_method
   IMPLICIT NONE
 
   PRIVATE
-  
+
   PUBLIC :: surface_GR_sancho
 
   CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'sancho_method'
@@ -33,6 +33,7 @@ CONTAINS
                                S_onsite, &
                                S_hopping, &
                                tolerance, &
+                               max_nsteps, &
                                GR_bulk)
     TYPE(mat_z_obj), INTENT(INOUT) :: GR_surface
     TYPE(mat_z_obj), INTENT(INOUT), OPTIONAL :: GR_bulk
@@ -40,10 +41,14 @@ CONTAINS
     TYPE(mat_d_obj), INTENT(IN) :: H_onsite, H_hopping, &
                                    S_onsite, S_hopping
     REAL(KIND=dp), INTENT(IN) :: tolerance
+    INTEGER, INTENT(IN) :: max_nsteps
 
     TYPE(mat_z_obj) :: So, Ho, St, Ht
     TYPE(mat_z_obj) :: A, B, E, ES, B_copy
     TYPE(mat_z_obj) :: GR_surface_A, GR_surface_B
+    LOGICAL :: converged
+    INTEGER :: ii
+    CHARACTER(LEN=6) :: nsteps_string
 
     CALL mat_real_to_complex(S_onsite, So)
     CALL mat_real_to_complex(H_onsite, Ho)
@@ -73,7 +78,13 @@ CONTAINS
     CALL mat_create(GR_surface_B, mat_nrows(GR_surface), mat_ncols(B))
     CALL mat_create(B_copy, mat_nrows(B), mat_ncols(B))
 
-    DO WHILE (mat_norm(A) + mat_norm(B) .GT. tolerance)
+    converged = .FALSE.
+
+    main_loop: DO ii = 1, max_nsteps
+       IF (mat_norm(A) + mat_norm(B) .LT. tolerance) THEN
+          converged = .TRUE.
+          EXIT main_loop
+       END IF
        CALL mat_inv_lu(E, GR_surface)
        CALL mat_mult('N', 'N', (1.0_dp,0.0_dp), GR_surface, A, (0.0_dp,0.0_dp), GR_surface_A)
        CALL mat_mult('N', 'N', (1.0_dp,0.0_dp), GR_surface, B, (0.0_dp,0.0_dp), GR_surface_B)
@@ -86,7 +97,14 @@ CONTAINS
        ! use B_copy as temprary storage for new B
        CALL mat_mult('N', 'N', (-1.0_dp,0.0_dp), B, GR_surface_B, (0.0_dp,0.0_dp), B_copy)
        CALL mat_copy(B_copy, B)
-    END DO
+    END DO main_loop
+
+    IF (.NOT. converged) THEN
+       WRITE (nsteps_string,FMT='(I6)') max_nsteps
+       CALL cp_warn(__LOCATION__, &
+                    "Sancho method for surface Green function calculation"\\&
+                    "failed to converge after "//max_nsteps//" steps.")
+    END IF
 
     CALL mat_inv_lu(ES, GR_surface)
 

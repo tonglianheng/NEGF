@@ -1,0 +1,2 @@
+{fortran}/[ \t]*TYPE[ \t]+[a-z0-9_]+/i
+{fortran}/[ \t]*INTERFACE[ \t]+[a-z0-9_]+/i
