@@ -840,6 +840,8 @@ CONTAINS
       context => mat_blacs_env(mat)
       CALL get_blacs_info(blacs_env=context, &
                           para_env=para_env)
+      mepos = para_env%mepos
+      ionode = para_env%ionode
       CALL cp_fm_get_submatrix(fm=matrix%obj%p, &
                                target_m=context)
       ! only ionode should write the matrix
@@ -883,6 +885,8 @@ CONTAINS
       context => mat_blacs_env(mat)
       CALL get_blacs_info(blacs_env=context, &
                           para_env=para_env)
+      mepos = para_env%mepos
+      ionode = para_env%ionode
       CALL cp_cfm_get_submatrix(fm=matrix%obj%p, &
                                 target_m=context)
       ! only ionode should write the matrix
