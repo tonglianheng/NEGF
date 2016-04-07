@@ -28,7 +28,8 @@ USE mathconstants, ONLY: pi
   PRIVATE
 
   !public methods
-  PUBLIC :: quad, sum_integral,&
+  PUBLIC :: quad,&
+            sum_integral,&
             generate_X3,&
             linspace,&
             calc_Peq,&
@@ -74,11 +75,14 @@ SUBROUTINE quad(my_negf_env, &
                 mat_integral,&
                 fcnt,&
                 func)
-  
-  TYPE(negf_env_obj) :: my_negf_env
-  TYPE(mat_z_obj), INTENT(OUT) :: mat_integral
-  COMPLEX(KIND=dp), INTENT(IN)    :: a,b
-  REAL(KIND=dp), INTENT(IN)  :: Tol
+!> tries to approximate an integral at [a,b] (a,b are complex) by
+!> the adaptive Simpson rule (3,5 orders) with the tolerance Tol.
+!> The integrand is func
+!> fcnt - is a number of function' evaluationsd
+  TYPE(negf_env_obj)            :: my_negf_env
+  TYPE(mat_z_obj), INTENT(OUT)  :: mat_integral
+  COMPLEX(KIND=dp), INTENT(IN)  :: a,b
+  REAL(KIND=dp), INTENT(IN)     :: Tol
   INTEGER, INTENT(OUT),OPTIONAL :: fcnt
 
   INTERFACE
@@ -93,13 +97,13 @@ SUBROUTINE quad(my_negf_env, &
   END INTERFACE
 
  !technical variables
-  INTEGER                        :: ii
-  COMPLEX(KIND=dp)               :: h
-  REAL(KIND=dp)                  :: hmin
-  COMPLEX(KIND=dp),   DIMENSION(7)  :: X
-  TYPE(mat_z_obj), DIMENSION(7)  :: mat_Y
-  TYPE(mat_z_obj)                :: mat_Q1, mat_Q2, mat_Q3
-  INTEGER                        :: warn, warn1, warn2, warn3
+  INTEGER                           :: ii
+  COMPLEX(KIND=dp)                  :: h
+  REAL(KIND=dp)                     :: hmin
+  COMPLEX(KIND=dp), DIMENSION(7)    :: X
+  TYPE(mat_z_obj),  DIMENSION(7)    :: mat_Y
+  TYPE(mat_z_obj)                   :: mat_Q1, mat_Q2, mat_Q3
+  INTEGER                           :: warn, warn1, warn2, warn3
 !default settings
  ! IF (.NOT.(PRESENT(Tol)))  Tol = 1.E-06_dp
 
@@ -198,11 +202,10 @@ TYPE(mat_z_obj),INTENT(OUT)     :: mat_Q
 !other
 INTEGER,PARAMETER               :: maxfcnt=10000
 COMPLEX(KIND=dp)                :: h,c
-REAL(KIND=dp)                   :: NElements
 COMPLEX(KIND=dp),DIMENSION(1:2) :: X
 TYPE(mat_z_obj)                 :: mat_fd, mat_fe, mat_Q1,mat_Q2,&
                                    mat_Qac, mat_Qcb, mat_difQ
-INTEGER                         :: Nrows,ii
+INTEGER                         :: ii
 INTEGER                         :: warnac,warncb
 !Evaluate integrand twice in interior of subinterval [a,b]
 h = b - a
@@ -253,8 +256,8 @@ IF (fcnt .GT. maxfcnt) THEN
 END IF
 
 !check mat_nrows (mat_Q) for the optimality!!! Maybe should be passed as an input?
-Nrows = mat_nrows(mat_Q)
-NElements = REAL((Nrows), KIND=dp)
+!Nrows = mat_nrows(mat_Q)
+!NElements = REAL((Nrows), KIND=dp)
 CALL mat_copy(mat_Q,mat_difQ)
 CALL mat_axpy((-1._dp,0._dp),'N',mat_Q2,mat_difQ)
 IF (ABS((mat_norm(mat_difQ))) .LE. Tol) THEN
@@ -304,9 +307,15 @@ warn = MAX(warnac,warncb)
 
 END SUBROUTINE quadstep
 
-SUBROUTINE sum_integral(my_negf_env, X, Tol, integral_sum, sum_fcnt,func)
-!calculate a set of integrals given by points in X(i)
-! to be paralelized!!!
+SUBROUTINE sum_integral(my_negf_env,&
+                        X,&
+                        Tol,&
+                        integral_sum,&
+                        sum_fcnt,&
+                        func)
+!> calculate a sum of a set of integrals given by points in X,
+!> where X is the set of points 
+!> to be paralelized!!!
 TYPE(negf_env_obj), INTENT(IN) :: my_negf_env
 COMPLEX(KIND = dp), DIMENSION(:), INTENT(IN) :: X
 TYPE(mat_z_obj), INTENT(OUT) :: integral_sum
@@ -326,12 +335,10 @@ TYPE(mat_z_obj) :: temp_integral
   END SUBROUTINE func
   END INTERFACE
 
-
 N_int = size(X) - 1
 CPASSERT (N_int .GE. 1)
 sum_fcnt = 0
 CALL quad(my_negf_env, X(1), X(2),Tol, integral_sum,sum_fcnt,func)
-
 
 IF (N_int .GE. 2) THEN
   DO ii = 2, N_int
@@ -348,8 +355,8 @@ END SUBROUTINE sum_integral
 SUBROUTINE generate_X3 (my_negf_env, N1, N2, N3, X1, X2, X3)
 !> generates three sets of points for sum_integral
 !> X1 (real axis)
-!> X2 (L) 
-!> X3 (C)
+!> X2 (L - paralel to the real axis) 
+!> X3 (C - circle)
 TYPE(negf_env_obj), INTENT(IN) :: my_negf_env
 COMPLEX(KIND = dp), DIMENSION(:), INTENT(OUT) :: X1, X2, X3
 INTEGER,  INTENT(IN) :: N1, N2, N3
@@ -412,7 +419,7 @@ END DO
 END SUBROUTINE generate_X3
 
 SUBROUTINE linspace_z(d1,d2,n,grid)
-
+!analog of the linspace in Matlab
 INTEGER, INTENT(IN) :: n
 COMPLEX(KIND = dp), INTENT(IN) :: d1, d2
 COMPLEX(KIND = dp), DIMENSION(n), INTENT(OUT) :: grid
