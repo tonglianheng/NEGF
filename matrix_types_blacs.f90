@@ -8,6 +8,8 @@ MODULE matrix_types
                           cp_fm_set_submatrix, &
                           cp_fm_release, &
                           cp_fm_get_info, &
+                          cp_fm_get_submatrix, &
+                          cp_fm_to_fm, &
                           cp_fm_to_fm_triangular
    USE cp_cfm_types, ONLY: cp_cfm_types, &
                            cp_cfm_create, &
@@ -15,17 +17,36 @@ MODULE matrix_types
                            cp_cfm_set_submatrix, &
                            cp_cfm_release, &
                            cp_cfm_get_info, &
-                           cp_fm_to_cfm
-   USE cp_blacs_env, ONLY: cp_blacs_env_type
+                           cp_cfm_get_submatrix, &
+                           cp_cfm_to_cfm, &
+                           cp_fm_to_cfm, &
+                           cp_cfm_to_fm
+   USE cp_blacs_env, ONLY: cp_blacs_env_type, &
+                           get_blacs_info
    USE cp_fm_struct, ONLY: cp_fm_struct_type, &
                            cp_fm_struct_create, &
-                           cp_fm_struct_get
+                           cp_fm_struct_get, &
+                           cp_fm_struct_release, &
+                           cp_fm_struct_equivalent
    USE cp_fm_basic_linalg, ONLY: cp_fm_gemm, &
                                  cp_fm_cholesky_decompose, &
-                                 cp_fm_cholesky_invert
+                                 cp_fm_cholesky_invert, &
+                                 cp_fm_lu_invert, &
+                                 cp_fm_transpose, &
+                                 cp_fm_geadd, &
+                                 cp_fm_scale, &
+                                 cp_fm_norm, &
+                                 cp_fm_latra
    USE cp_cfm_basic_linalg, ONLY: cp_cfm_gemm, &
                                   cp_cfm_cholesky_decompose, &
-                                  cp_cfm_cholesky_invert
+                                  cp_cfm_cholesky_invert, &
+                                  cp_cfm_lu_invert, &
+                                  cp_cfm_transpose, &
+                                  cp_cfm_geadd, &
+                                  cp_cfm_scale, &
+                                  cp_cfm_norm, &
+                                  cp_cfm_latra
+   USE cp_para_types, ONLY: cp_para_env_type
 
 #include "./base/base_uses.f90"
 
@@ -57,11 +78,14 @@ MODULE matrix_types
              mat_nrows, &
              mat_read, &
              mat_real_to_complex, &
+             mat_complex_to_real, &
              mat_release, &
              mat_scale, &
+             mat_set, &
              mat_struct_equiv, &
              mat_symmetry, &
              mat_trace, &
+             mat_transpose, &
              mat_write, &
              mat_zero
 
@@ -156,6 +180,11 @@ MODULE matrix_types
       MODULE PROCEDURE mat_inv_lu_z
    END INTERFACE mat_inv_lu
 
+   INTERFACE mat_set
+      MODULE PROCEDURE mat_set_d
+      MODULE PROCEDURE mat_set_z
+   END INTERFACE mat_set
+
    INTERFACE mat_read
       MODULE PROCEDURE mat_read_d
       MODULE PROCEDURE mat_read_z
@@ -201,6 +230,10 @@ MODULE matrix_types
       MODULE PROCEDURE mat_trace_z
    END INTERFACE mat_trace
 
+   INTERFACE mat_transpose
+      MODULE PROCEDURE mat_transpose_d
+      MODULE PROCEDURE mat_transpose_z
+   END INTERFACE mat_transpose
 
 CONTAINS
 
@@ -235,6 +268,7 @@ CONTAINS
       ELSE
          CALL cp_fm_create(mat%obj%p, fmstruct)
       END IF
+      CALL cp_fm_struct_release(fmstruct)
       IF (PRESENT(symmetry)) THEN
          mat%obj%symmetry = symmetry
       ELSE
@@ -273,6 +307,7 @@ CONTAINS
       ELSE
          CALL cp_cfm_create(mat%obj%p, fmstruct)
       END IF
+      CALL cp_fm_struct_release(fmstruct)
       IF (PRESENT(symmetry)) THEN
          mat%obj%symmetry = symmetry
       ELSE
@@ -297,7 +332,9 @@ CONTAINS
       IF (ASSOCIATED(mat%obj)) THEN
          mat%obj%ref_count = mat%obj%ref_count - 1
          IF (mat%obj%ref_count .EQ. 0) THEN
-            IF (ASSOCIATED(mat%obj%p)) CALL cp_fm_release(mat%obj%p)
+            IF (ASSOCIATED(mat%obj%p)) THEN
+               CALL cp_fm_release(mat%obj%p)
+            END IF
             DEALLOCATE(mat%obj)
          END IF
          NULLIFY(mat%obj)
@@ -309,7 +346,9 @@ CONTAINS
       IF (ASSOCIATED(mat%obj)) THEN
          mat%obj%ref_count = mat%obj%ref_count - 1
          IF (mat%obj%ref_count .EQ. 0) THEN
-            IF (ASSOCIATED(mat%obj%p)) CALL cp_cfm_release(mat%obj%p)
+            IF (ASSOCIATED(mat%obj%p)) THEN
+               CALL cp_cfm_release(mat%obj%p)
+            END IF
             DEALLOCATE(mat%obj)
          END IF
          NULLIFY(mat%obj)
@@ -355,9 +394,9 @@ CONTAINS
       CPASSERT(ASSOCIATED(mat%obj))
       CPASSERT(ASSOCIATED(mat%obj%p))
       CALL cp_cfm_get_info(matrix=mat%obj%p, &
-           matrix_struct=struct)
+                           matrix_struct=struct)
       CALL cp_fm_struct_get(fmstruct=struct, &
-           context=res)
+                            context=res)
    END FUNCTION mat_blacs_env_z
 
    FUNCTION mat_struct_equiv_d(mat_a, mat_b) RESULT(res)
@@ -394,6 +433,7 @@ CONTAINS
       TYPE(mat_d_obj), INTENT(IN) :: mat_d
       TYPE(mat_z_obj), INTENT(INOUT) :: mat_z
       CPASSERT(ASSOCIATED(mat_d%obj))
+      CPASSERT(ASSOCIATED(mat_d%obj%p))
       CALL mat_release(mat_z)
       CALL mat_create(mat_z, &
                       mat_nrows(mat_d), &
@@ -404,77 +444,30 @@ CONTAINS
       mat_z%obj%symmetry = mat_d%obj%symmetry
    END SUBROUTINE mat_real_to_complex
 
-   ! SUBROUTINE mat_mult_d(transA, transB, alpha, A, B, beta, C)
-   !   TYPE(mat_d_obj), INTENT(IN) :: A, B
-   !   TYPE(mat_d_obj), INTENT(INOUT) :: C
-   !   CHARACTER, INTENT(IN) :: transA, transB
-   !   REAL(KIND=dp), INTENT(IN) :: alpha, beta
-
-   !   INTEGER :: nrows_A, ncols_A, ncols_B
-   !   LOGICAL :: do_symm
-   !   INTEGER :: ii, jj
-
-   !   CPASSERT(.NOT. is_same_obj(A,C))
-   !   CPASSERT(.NOT. is_same_obj(B,C))
-
-   !   nrows_A = mat_nrows(A)
-   !   ncols_A = mat_ncols(A)
-   !   ncols_B = mat_ncols(B)
-
-   !   CPASSERT(mat_nrows(B) .EQ. ncols_A)
-   !   IF (ASSOCIATED(C%obj)) THEN
-   !      IF (ALLOCATED(C%obj%p)) CPASSERT(mat_nrows(C) .EQ. nrows_A)
-   !      IF (ALLOCATED(C%obj%p)) CPASSERT(mat_ncols(C) .EQ. ncols_B)
-   !   ELSE
-   !      CALL mat_create(C, nrows_A, ncols_B, MAT_GENERAL)
-   !   END IF
-
-   !   ! if either A or B are symmetric, then their corresponding trans
-   !   ! must not be 'T'
-   !   IF (mat_symmetr(A) .EQ. MAT_SYMMETRIC) CPASSERT(transA .EQ. 'N')
-   !   IF (mat_symmetr(B) .EQ. MAT_SYMMETRIC) CPASSERT(transB .EQ. 'N')
-
-   !   do_symm = .FALSE.
-   !   IF ((mat_symmetry(A) .EQ. MAT_SYMMETRIC) .AND. &
-   !       (transB .EQ. 'N')) THEN
-   !      do_symm = .TRUE.
-   !      ! need to make B full if it is symmetric
-   !      IF (mat_symmetry(B) .EQ. MAT_SYMMETRIC) THEN
-   !         DO ii = 1, ncols_A
-   !            DO jj = 1, ii
-   !               B%obj%p(ii,jj) = B%obj%p(jj,ii)
-   !            END DO
-   !         END DO
-   !      END IF
-   !   ELSE IF ((mat_symmetry(B) .EQ. MAT_SYMMETRIC) .AND. &
-   !            (transA .EQ. 'N')) THEN
-   !      do_symm = .TRUE.
-   !      ! need to make A full if it is symmetric
-   !      IF (mat_symmetry(A) .EQ. MAT_SYMMETRIC) THEN
-   !         DO ii = 1, nrows_A
-   !            DO jj = 1, ii
-   !               A%obj%p(ii,jj) = A%obj%p(jj,ii)
-   !            END DO
-   !         END DO
-   !      END IF
-   !   END IF
-   !   IF (do_symm) THEN
-   !      IF (mat_symmetry(A) .EQ. MAT_SYMMETRIC) THEN
-   !         CALL DSYMM('L', 'U', nrows_A, ncols_B, &
-   !                    alpha, A%obj%p, nrows_A, B%obj%p, ncols_A, &
-   !                    beta, C%obj%p, nrows_A)
-   !      ELSE IF (mat_symmetry(B) .EQ. MAT_SYMMETRIC) THEN
-   !         CALL DSYMM('R', 'U', nrows_A, ncols_B, &
-   !                    alpha, B%obj%p, ncols_A, A%obj%p, nrows_A, &
-   !                    beta, C%obj%p, nrows_A)
-   !      END IF
-   !   ELSE
-   !      CALL DGEMM(transA, transB, &
-   !                 nrows_A, ncols_B, ncols_A, &
-   !                 alpha, A%obj%p, nrows_A, B%obj%p, ncols_A, &
-   !                 beta, C%p, nrows_A)
-   !   END IF
-   ! END SUBROUTINE mat_mult_d
+   SUBROUTINE mat_complex_to_real(mat_z, mat_r, mat_i)
+      TYPE(mat_z_obj), INTENT(IN) :: mat_z
+      TYPE(mat_d_obj), INTENT(INOUT), OPTIONAL :: mat_r, mat_i
+      CPASSERT(ASSOCIATED(mat_z%obj))
+      CPASSERT(ASSOCIATED(mat_z%obj%p))
+      IF (PRESENT(mat_r)) THEN
+         CALL mat_release(mat_r)
+         CALL mat_create(mat_r, &
+                         mat_nrows(mat_z), &
+                         mat_ncols(mat_z), &
+                         mat_blacs_env(mat_z))
+         CALL cp_cfm_to_fm(msource=mat_z%obj%p, &
+                           mtargetr=mat_r%obj%p)
+      END IF
+      IF (PRESENT(mat_i)) THEN
+         CALL mat_release(mat_i)
+         CALL mat_create(mat_i, &
+                         mat_nrows(mat_z), &
+                         mat_ncols(mat_z), &
+                         mat_blacs_env(mat_z))
+         CALL cp_cfm_to_fm(msource=mat_z%obj%p, &
+                           mtargeti=mat_i%obj%p)
+      END IF
+   END SUBROUTINE mat_complex_to_real
 
    SUBROUTINE mat_mult_d(transA, transB, alpha, A, B, beta, C)
       TYPE(mat_d_obj), INTENT(IN) :: A, B
@@ -483,7 +476,7 @@ CONTAINS
       REAL(KIND=dp), INTENT(IN) :: alpha, beta
 
       INTEGER :: nrows_A, ncols_A, ncols_B
-      TYPE(cp_blacs_env_type), POINTER :: struct
+      TYPE(cp_blacs_env_type), POINTER :: context
 
       CPASSERT(.NOT. is_same_obj(A,C))
       CPASSERT(.NOT. is_same_obj(B,C))
@@ -491,14 +484,14 @@ CONTAINS
       nrows_A = mat_nrows(A)
       ncols_A = mat_ncols(A)
       ncols_B = mat_ncols(B)
-      struct => mat_blacs_env(A)
+      context => mat_blacs_env(A)
 
       CPASSERT(mat_nrows(B) .EQ. ncols_A)
       IF (ASSOCIATED(C%obj)) THEN
          CPASSERT(mat_nrows(C) .EQ. nrows_A)
          CPASSERT(mat_ncols(C) .EQ. ncols_B)
       ELSE
-         CALL mat_create(C, nrows_A, ncols_B, struct)
+         CALL mat_create(C, nrows_A, ncols_B, context)
       END IF
       CALL cp_fm_gemm(transA, transB, &
                       nrows_A, ncols_B, ncols_A, &
@@ -513,7 +506,7 @@ CONTAINS
       COMPLEX(KIND=dp), INTENT(IN) :: alpha, beta
 
       INTEGER :: nrows_A, ncols_A, ncols_B
-      TYPE(cp_blacs_env_type), POINTER :: struct
+      TYPE(cp_blacs_env_type), POINTER :: context
 
       CPASSERT(.NOT. is_same_obj(A,C))
       CPASSERT(.NOT. is_same_obj(B,C))
@@ -521,14 +514,14 @@ CONTAINS
       nrows_A = mat_nrows(A)
       ncols_A = mat_ncols(A)
       ncols_B = mat_ncols(B)
-      struct => mat_blacs_env(A)
+      context => mat_blacs_env(A)
 
       CPASSERT(mat_nrows(B) .EQ. ncols_A)
       IF (ASSOCIATED(C%obj)) THEN
          CPASSERT(mat_nrows(C) .EQ. nrows_A)
          CPASSERT(mat_ncols(C) .EQ. ncols_B)
       ELSE
-         CALL mat_create(C, nrows_A, ncols_B, struct)
+         CALL mat_create(C, nrows_A, ncols_B, context)
       END IF
       CALL cp_cfm_gemm(transA, transB, &
                        nrows_A, ncols_B, ncols_A, &
@@ -624,158 +617,254 @@ CONTAINS
       TYPE(mat_d_obj), INTENT(IN) :: mat
       TYPE(mat_d_obj), INTENT(INOUT) :: inv
 
-      INTEGER :: nrows, info, lwork
-      INTEGER, DIMENSION(:), ALLOCATABLE :: ipiv
+      INTEGER :: nrows, info
       CHARACTER(LEN=6) :: info_string
-      REAL(KIND=dp), DIMENSION(:), ALLOCATABLE :: work
       CPASSERT(.NOT. is_same_obj(mat,inv))
       nrows = mat_nrows(mat)
       IF (ASSOCIATED(inv%obj)) THEN
          CPASSERT(mat_nrows(inv) .EQ. nrows)
          CPASSERT(mat_ncols(inv) .EQ. nrows)
+         CPASSERT(mat_struct_equiv(mat, inv))
       ELSE
-         CALL mat_create(inv, nrows, nrows)
+         CALL mat_create(inv, nrows, nrows, mat_blacs_env(mat))
       END IF
       ! copy matrix
-      CALL DLACPY('N', nrows, nrows, mat%obj%p, nrows, inv%obj%p, nrows)
-      ! do LU factorisation
-      ALLOCATE(ipiv(nrows))
-      CALL DGETRF(nrows, nrows, inv%obj%p, nrows, ipiv, info)
-      IF (info .NE. 0) THEN
-         WRITE (info_string, FMT="(I6)") info
-         CPABORT("DGETRF failed with info = "//info_string)
-      END IF
+      CALL cp_fm_to_fm_triangular(mat%obj%p, inv%ob%p, 'U')
       ! do inversion
-      ALLOCATE(work(1))
-      CALL DGETRI(nrows, inv%obj%p, nrows, ipiv, work, -1, info)
-      lwork = work(1)
-      DEALLOCATE(work)
-      ALLOCATE(work(lwork))
-      CALL DGETRI(nrows, inv%obj%p, nrows, ipiv, work, lwork, info)
+      CALL cp_fm_lu_invert(inv%obj%p, info)
       IF (info .NE. 0) THEN
          WRITE (info_string, FMT="(I6)") info
-         CPABORT("DGETRI failed with info = "//info_string)
+         CPABORT("LU inversion failed with info = "//info_string)
       END IF
-      ! cleanup
-      DEALLOCATE(ipiv)
-      DEALLOCATE(work)
    END SUBROUTINE mat_inv_lu_d
 
    SUBROUTINE mat_inv_lu_z(mat, inv)
       TYPE(mat_z_obj), INTENT(IN) :: mat
       TYPE(mat_z_obj), INTENT(INOUT) :: inv
 
-      INTEGER :: nrows, info, lwork
-      INTEGER, DIMENSION(:), ALLOCATABLE :: ipiv
+      INTEGER :: nrows, info
       CHARACTER(LEN=6) :: info_string
-      COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE :: work
       CPASSERT(.NOT. is_same_obj(mat,inv))
       nrows = mat_nrows(mat)
       IF (ASSOCIATED(inv%obj)) THEN
          CPASSERT(mat_nrows(inv) .EQ. nrows)
          CPASSERT(mat_ncols(inv) .EQ. nrows)
+         CPASSERT(mat_struct_equiv(mat, inv))
       ELSE
-         CALL mat_create(inv, nrows, nrows)
+         CALL mat_create(inv, nrows, nrows, mat_blacs_env(mat))
       END IF
       ! copy matrix
-      CALL ZLACPY('N', nrows, nrows, mat%obj%p, nrows, inv%obj%p, nrows)
-      ! do LU factorisation
-      ALLOCATE(ipiv(nrows))
-      CALL ZGETRF(nrows, nrows, inv%obj%p, nrows, ipiv, info)
-      IF (info .NE. 0) THEN
-         WRITE (info_string, FMT="(I6)") info
-         CPABORT("ZGETRF failed with info = "//info_string)
-      END IF
+      CALL cp_cfm_to_cfm_triangular(mat%obj%p, inv%ob%p, 'U')
       ! do inversion
-      ALLOCATE(work(1))
-      CALL ZGETRI(nrows, inv%obj%p, nrows, ipiv, work, -1, info)
-      lwork = work(1)
-      DEALLOCATE(work)
-      ALLOCATE(work(lwork))
-      CALL ZGETRI(nrows, inv%obj%p, nrows, ipiv, work, lwork, info)
+      CALL cp_cfm_lu_invert(inv%obj%p, info)
       IF (info .NE. 0) THEN
          WRITE (info_string, FMT="(I6)") info
-         CPABORT("ZGETRI failed with info = "//info_string)
+         CPABORT("LU inversion failed with info = "//info_string)
       END IF
-      ! cleanup
-      DEALLOCATE(ipiv)
-      DEALLOCATE(work)
    END SUBROUTINE mat_inv_lu_z
 
-   SUBROUTINE mat_read_d(mat, filename)
+   SUBROUTINE mat_set_d(mat, &
+                        values, &
+                        start_row, &
+                        start_col, &
+                        nrows, &
+                        ncols, &
+                        transpose, &
+                        symmetry)
+      TYPE(mat_d_obj), INTENT(INOUT) :: mat
+      REAL(KIND=dp), DIMENSION(:,:), INTENT(IN) :: values
+      INTEGER, INTENT(IN), OPTIONAL :: start_row, start_col, nrows, ncols, symmetry
+      CHARACTER, INTENT(IN), OPTIONAL :: transpose
+
+      INTEGER :: nrows_global, ncols_global, &
+                 my_start_row, my_start_col, my_nrows, my_ncols, &
+                 my_symmetry
+      LOGICAL :: do_transpose
+      ! set defaults
+      my_start_row = 1
+      my_start_col = 1
+      my_nrows = SIZE(values, 1)
+      my_ncols = SIZE(values, 2)
+      do_transpose = .FALSE.
+      my_symmetry = MAT_GENERAL
+      ! modify with user input
+      IF (PRESENT(start_row)) my_start_row = start_row
+      IF (PRESENT(start_col)) my_start_col = start_col
+      IF (PRESENT(nrows)) my_nrows = nrows
+      IF (PRESENT(ncols)) my_ncols = ncols
+      IF (PRESENT(transpose)) do_transpose = (transpose .EQ. 'T')
+      IF (PRESENT(symmetry)) my_symmetry = symmetry
+      ! check matrix size compatible
+      CPASSERT(ASSOCIATED(mat%obj))
+      CPASSERT(ASSOCIATED(mat%obj%p))
+      CALL cp_fm_get_info(matrix=mat%obj%p, &
+                          nrow_global=nrows_global, &
+                          ncol_global=ncols_global)
+      IF (my_start_row+my_nrows-1 .GT. nrow_global) THEN
+         CPABORT("limits exceed total number of rows")
+      END IF
+      IF (my_start_col+my_ncols-1 .GT. ncol_global) THEN
+         CPABORT("limits exceed total number of cols")
+      END IF
+      ! copy data
+      CALL cp_fm_set_submatrix(fm=matrix%obj%p, &
+                               new_values=values, &
+                               start_row=my_start_row, &
+                               start_col=my_start_col, &
+                               transpose=do_transpose)
+   END SUBROUTINE mat_set_d
+
+   SUBROUTINE mat_set_z(mat, &
+                        values, &
+                        start_row, &
+                        start_col, &
+                        nrows, &
+                        ncols, &
+                        transpose, &
+                        symmetry)
+      TYPE(mat_z_obj), INTENT(INOUT) :: mat
+      COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(IN) :: values
+      INTEGER, INTENT(IN), OPTIONAL :: start_row, start_col, nrows, ncols, symmetry
+      CHARACTER, INTENT(IN), OPTIONAL :: transpose
+
+      INTEGER :: nrows_global, ncols_global, &
+                 my_start_row, my_start_col, my_nrows, my_ncols, &
+                 my_symmetry
+      LOGICAL :: do_transpose
+      ! set defaults
+      my_start_row = 1
+      my_start_col = 1
+      my_nrows = SIZE(values, 1)
+      my_ncols = SIZE(values, 2)
+      do_transpose = .FALSE.
+      my_symmetry = MAT_GENERAL
+      ! modify with user input
+      IF (PRESENT(start_row)) my_start_row = start_row
+      IF (PRESENT(start_col)) my_start_col = start_col
+      IF (PRESENT(nrows)) my_nrows = nrows
+      IF (PRESENT(ncols)) my_ncols = ncols
+      IF (PRESENT(transpose)) do_transpose = (transpose .EQ. 'T')
+      IF (PRESENT(symmetry)) my_symmetry = symmetry
+      ! check matrix size compatible
+      CPASSERT(ASSOCIATED(mat%obj))
+      CPASSERT(ASSOCIATED(mat%obj%p))
+      CALL cp_cfm_get_info(matrix=mat%obj%p, &
+                           nrow_global=nrows_global, &
+                           ncol_global=ncols_global)
+      IF (my_start_row+my_nrows-1 .GT. nrow_global) THEN
+         CPABORT("limits exceed total number of rows")
+      END IF
+      IF (my_start_col+my_ncols-1 .GT. ncol_global) THEN
+         CPABORT("limits exceed total number of cols")
+      END IF
+      ! copy data
+      CALL cp_cfm_set_submatrix(fm=matrix%obj%p, &
+                                new_values=values, &
+                                start_row=my_start_row, &
+                                start_col=my_start_col, &
+                                transpose=do_transpose)
+   END SUBROUTINE mat_set_z
+
+   SUBROUTINE mat_read_d(mat, filename, blacs_env)
       TYPE(mat_d_obj), INTENT(INOUT) :: mat
       CHARACTER(LEN=*), INTENT(IN) :: filename
+      TYPE(blacs_env_type), POINTER :: blacs_env
 
       INTEGER, PARAMETER :: UNIT_NR = 100
       INTEGER :: nrows, ncols, ii
-      ! open file
-      OPEN(UNIT_NR, file=filename)
+      REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: content
       ! read into matrix
+      OPEN(UNIT_NR, file=filename)
       READ (UNIT_NR, FMT=*) nrows, ncols
-      IF (ASSOCIATED(mat%obj)) CALL mat_release(mat)
-      CALL mat_create(mat, nrows, ncols)
+      ALLOCATE (content(nrows,ncols))
+      content = 0.0_dp
       DO ii = 1, nrows
-         READ (UNIT_NR, FMT=*) mat%obj%p(ii,:)
+         READ (UNIT_NR, FMT=*) content(ii,:)
       END DO
-      ! close file
       CLOSE(UNIT_NR)
+      ! reallocate matrix
+      IF (ASSOCIATED(mat%obj)) CALL mat_release(mat)
+      CALL mat_create(mat, nrows, ncols, blacs_env)
+      ! copy data
+      CALL mat_set(mat, content)
+      ! cleanup
+      DEALLOCATE (content)
    END SUBROUTINE mat_read_d
 
-   SUBROUTINE mat_read_z(mat, filename)
+   SUBROUTINE mat_read_z(mat, filename, blacs_env)
       TYPE(mat_z_obj), INTENT(INOUT) :: mat
       CHARACTER(LEN=*), INTENT(IN) :: filename
 
       INTEGER, PARAMETER :: UNIT_NR = 100
       INTEGER :: nrows, ncols, ii, jj
-      REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: tmp
-      ! open file
-      OPEN(UNIT_NR, file=filename)
+      REAL(KIND=dp), DIMENSION(:), ALLOCATABLE :: tmp
+      COMPLEX(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: content
       ! read into matrix
+      OPEN(UNIT_NR, file=filename)
       READ (UNIT_NR, FMT=*) nrows, ncols
-      IF (ASSOCIATED(mat%obj)) CALL mat_release(mat)
-      CALL mat_create(mat, nrows, ncols)
-      ALLOCATE(tmp(nrows,2*ncols))
+      ALLOCATE (tmp(2*ncols))
+      ALLOCATE (content(nrows,ncols))
       tmp = 0.0_dp
       DO ii = 1, nrows
-         READ (UNIT_NR, FMT=*) tmp(ii,:)
-      END DO
-      DO jj = 1, ncols
-         DO ii = 1, nrows
-            mat%obj%p(ii,jj) = CMPLX(tmp(ii,2*jj-1), tmp(ii,2*jj), KIND=dp)
+         READ (UNIT_NR, FMT=*) tmp(:)
+         DO jj = 1, ncols
+            content(ii,jj) = CMPLX(tmp(2*jj-1), tmp(2*jj), KIND=dp)
          END DO
+         tmp = 0.0_dp
       END DO
       DEALLOCATE(tmp)
-      ! close file
       CLOSE(UNIT_NR)
+      ! reallocate matrix
+      IF (ASSOCIATED(mat%obj)) CALL mat_release(mat)
+      CALL mat_create(mat, nrows, ncols, blacs_env)
+      ! copy data
+      CALL mat_set(mat, content)
+      ! cleanup
+      DEALLOCATE(content)
    END SUBROUTINE mat_read_z
 
    SUBROUTINE mat_write_d(mat, filename)
       TYPE(mat_d_obj), INTENT(IN) :: mat
       CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: filename
 
-      INTEGER :: my_unit_nr, nrows, ncols, ii, jj
+      INTEGER :: my_unit_nr, nrows, ncols, ii, jj, &
+                 mepos, ionode
+      TYPE(cp_blacs_env_type), POINTER :: context
+      TYPE(cp_para_env_type), POINTER :: para_env
+      REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: content
 
       CPASSERT(ASSOCIATED(mat%obj))
+      CPASSERT(ASSOCIATED(mat%obj%p))
       nrows = mat_nrows(mat)
       ncols = mat_ncols(mat)
-      IF (PRESENT(filename)) THEN
-         my_unit_nr = 100
-         CPASSERT(my_unit_nr .NE. default_output_unit)
-         OPEN(my_unit_nr, file=filename)
-      ELSE
-         my_unit_nr = default_output_unit
-      END IF
-      ! write matrix
-      WRITE (my_unit_nr, FMT="(2I6)") nrows, ncols
-      DO ii = 1, nrows
-         DO jj = 1, ncols
-            WRITE (my_unit_nr, FMT="(F12.7,2X)", ADVANCE="no") mat%obj%p(ii,jj)
+      context => mat_blacs_env(mat)
+      CALL get_blacs_info(blacs_env=context, &
+                          para_env=para_env)
+      mepos = para_env%mepos
+      ionode = para_env%ionode
+      CALL cp_fm_get_submatrix(fm=matrix%obj%p, &
+                               target_m=context)
+      ! only ionode should write the matrix
+      IF (mepos .EQ. ionode) THEN
+         IF (PRESENT(filename)) THEN
+            my_unit_nr = 100
+            CPASSERT(my_unit_nr .NE. default_output_unit)
+            OPEN(my_unit_nr, file=filename)
+         ELSE
+            my_unit_nr = default_output_unit
+         END IF
+         ! write matrix
+         WRITE (my_unit_nr, FMT="(2I6)") nrows, ncols
+         DO ii = 1, nrows
+            DO jj = 1, ncols
+               WRITE (my_unit_nr, FMT="(F12.7,2X)", ADVANCE="no") content(ii,jj)
+            END DO
+            WRITE (my_unit_nr, *) ""
          END DO
-         WRITE (my_unit_nr, *) ""
-      END DO
-      ! close file if we need to
-      IF (PRESENT(filename)) THEN
-         CLOSE(my_unit_nr)
+         ! close file if we need to
+         IF (PRESENT(filename)) THEN
+            CLOSE(my_unit_nr)
+         END IF
       END IF
    END SUBROUTINE mat_write_d
 
@@ -783,115 +872,93 @@ CONTAINS
       TYPE(mat_z_obj), INTENT(IN) :: mat
       CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: filename
 
-      INTEGER :: my_unit_nr, nrows, ncols, ii, jj
+      INTEGER :: my_unit_nr, nrows, ncols, ii, jj, &
+                 mepos, ionode
+      TYPE(cp_blacs_env_type), POINTER :: context
+      TYPE(cp_para_env_type), POINTER :: para_env
+      COMPLEX(KIND=dp), DIMENSION(:,:), ALLOCATABLE :: content
 
       CPASSERT(ASSOCIATED(mat%obj))
+      CPASSERT(ASSOCIATED(mat%obj%p))
       nrows = mat_nrows(mat)
       ncols = mat_ncols(mat)
-      IF (PRESENT(filename)) THEN
-         my_unit_nr = 100
-         CPASSERT(my_unit_nr .NE. default_output_unit)
-         OPEN(my_unit_nr, file=filename)
-      ELSE
-         my_unit_nr = default_output_unit
-      END IF
-      ! write matrix
-      WRITE (my_unit_nr, FMT="(2I6)") nrows, ncols
-      DO ii = 1, nrows
-         DO jj = 1, ncols
-            WRITE (my_unit_nr, FMT="(F12.7,1X,F12.7,3X)", ADVANCE="no") mat%obj%p(ii,jj)
+      context => mat_blacs_env(mat)
+      CALL get_blacs_info(blacs_env=context, &
+                          para_env=para_env)
+      mepos = para_env%mepos
+      ionode = para_env%ionode
+      CALL cp_cfm_get_submatrix(fm=matrix%obj%p, &
+                                target_m=context)
+      ! only ionode should write the matrix
+      IF (mepos .EQ. ionode) THEN
+         IF (PRESENT(filename)) THEN
+            my_unit_nr = 100
+            CPASSERT(my_unit_nr .NE. default_output_unit)
+            OPEN(my_unit_nr, file=filename)
+         ELSE
+            my_unit_nr = default_output_unit
+         END IF
+         ! write matrix
+         WRITE (my_unit_nr, FMT="(2I6)") nrows, ncols
+         DO ii = 1, nrows
+            DO jj = 1, ncols
+               WRITE (my_unit_nr, FMT="(F12.7,1X,F12.7,3X)", ADVANCE="no") content(ii,jj)
+            END DO
+            WRITE (my_unit_nr, *) ""
          END DO
-         WRITE (my_unit_nr, *) ""
-      END DO
-      ! close file if we need to
-      IF (PRESENT(filename)) THEN
-         CLOSE(my_unit_nr)
+         ! close file if we need to
+         IF (PRESENT(filename)) THEN
+            CLOSE(my_unit_nr)
+         END IF
       END IF
    END SUBROUTINE mat_write_z
 
    PURE FUNCTION mat_nrows_d(mat) RESULT(res)
       TYPE(mat_d_obj), INTENT(IN) :: mat
       INTEGER :: res
-      res = SIZE(mat%obj%p,1)
+      CALL cp_fm_get_info(matrix=mat%obj%p, &
+                          nrow_global=res)
    END FUNCTION mat_nrows_d
 
    PURE FUNCTION mat_nrows_z(mat) RESULT(res)
       TYPE(mat_z_obj), INTENT(IN) :: mat
       INTEGER :: res
-      res = SIZE(mat%obj%p,1)
+      CALL cp_cfm_get_info(matrix=mat%obj%p, &
+                           nrow_global=res)
    END FUNCTION mat_nrows_z
 
    PURE FUNCTION mat_ncols_d(mat) RESULT(res)
       TYPE(mat_d_obj), INTENT(IN) :: mat
       INTEGER :: res
-      res = SIZE(mat%obj%p,2)
+      CALL cp_fm_get_info(matrix=mat%obj%p, &
+                          ncol_global=res)
    END FUNCTION mat_ncols_d
 
    PURE FUNCTION mat_ncols_z(mat) RESULT(res)
       TYPE(mat_z_obj), INTENT(IN) :: mat
       INTEGER :: res
-      res = SIZE(mat%obj%p,2)
+      CALL cp_cfm_get_info(matrix=mat%obj%p, &
+                           ncol_global=res)
    END FUNCTION mat_ncols_z
 
    SUBROUTINE mat_axpy_d(a, transX, X, Y)
       ! computes Y = aX^(T) + Y
       REAL(KIND=dp), INTENT(IN) :: a
-      CHARACTER(LEN=*), INTENT(IN) :: transX
+      CHARACTER, INTENT(IN) :: transX
       TYPE(mat_d_obj), INTENT(IN) :: X
       TYPE(mat_d_obj), INTENT(INOUT) :: Y
-
-      INTEGER :: ii, jj, nrows, ncols
       CPASSERT(.NOT. is_same_obj(X,Y))
-      nrows = mat_nrows(Y)
-      ncols = mat_ncols(Y)
-      IF (transX .EQ. 'T') THEN
-         CPASSERT(mat_nrows(X) .EQ. ncols)
-         CPASSERT(mat_ncols(X) .EQ. nrows)
-         DO jj = 1, ncols
-            DO ii = 1, nrows
-               Y%obj%p(ii,jj) = a * X%obj%p(jj,ii) + Y%obj%p(ii,jj)
-            END DO
-         END DO
-      ELSE
-         CPASSERT(mat_nrows(X) .EQ. nrows)
-         CPASSERT(mat_ncols(X) .EQ. ncols)
-         Y%obj%p = a*X%obj%p + Y%obj%p
-      END IF
+      CALL cp_fm_geadd(a, transX, X%obj%p, 1.0_dp, Y%obj%p)
    END SUBROUTINE mat_axpy_d
 
    SUBROUTINE mat_axpy_z(a, transX, X, Y)
       ! computes Y = aX^(T) + Y
       COMPLEX(KIND=dp), INTENT(IN) :: a
-      CHARACTER(LEN=*), INTENT(IN) :: transX
+      CHARACTER, INTENT(IN) :: transX
       TYPE(mat_z_obj), INTENT(IN) :: X
       TYPE(mat_z_obj), INTENT(INOUT) :: Y
-
-      INTEGER :: ii, jj, nrows, ncols
       CPASSERT(.NOT. is_same_obj(X,Y))
-      nrows = mat_nrows(Y)
-      ncols = mat_ncols(Y)
-      SELECT CASE (transX)
-      CASE ('T')
-         CPASSERT(mat_nrows(X) .EQ. ncols)
-         CPASSERT(mat_ncols(X) .EQ. nrows)
-         DO jj = 1, ncols
-            DO ii = 1, nrows
-               Y%obj%p(ii,jj) = a * X%obj%p(jj,ii) + Y%obj%p(ii,jj)
-            END DO
-         END DO
-      CASE ('C')
-         CPASSERT(mat_nrows(X) .EQ. ncols)
-         CPASSERT(mat_ncols(X) .EQ. nrows)
-         DO jj = 1, ncols
-            DO ii = 1, nrows
-               Y%obj%p(ii,jj) = a * CONJG(X%obj%p(jj,ii)) + Y%obj%p(ii,jj)
-            END DO
-         END DO
-      CASE DEFAULT
-         CPASSERT(mat_nrows(X) .EQ. nrows)
-         CPASSERT(mat_ncols(X) .EQ. ncols)
-         Y%obj%p = a*X%obj%p + Y%obj%p
-      END SELECT
+      CALL cp_cfm_geadd(a, transX, X%obj%p, (1.0_dp,0.0_dp), Y%obj%p)
    END SUBROUTINE mat_axpy_z
 
    SUBROUTINE mat_zero_d(mat)
@@ -899,7 +966,7 @@ CONTAINS
       ! assume assoicated obj always leads to allocated obj%p, as no
       ! module method should allocate obj but not also allocate obj%p
       IF (ASSOCIATED(mat%obj)) THEN
-         mat%obj%p = 0.0_dp
+         CALL cp_fm_scale(0.0_dp, mat%obj%p)
       END IF
    END SUBROUTINE mat_zero_d
 
@@ -908,42 +975,40 @@ CONTAINS
       ! assume assoicated obj always leads to allocated obj%p, as no
       ! module method should allocate obj but not also allocate obj%p
       IF (ASSOCIATED(mat%obj)) THEN
-         mat%obj%p = (0.0_dp,0.0_dp)
+         CALL cp_cfm_scale((0.0_dp,0.0_dp), mat%obj%p)
       END IF
    END SUBROUTINE mat_zero_z
 
    SUBROUTINE mat_copy_d(A, B)
       TYPE(mat_d_obj), INTENT(IN) :: A
       TYPE(mat_d_obj), INTENT(INOUT) :: B
-      INTEGER :: nrows, ncols
-      nrows = mat_nrows(A)
-      ncols = mat_ncols(A)
       IF (ASSOCIATED(B%obj)) CALL mat_release(B)
-      CALL mat_create(B, mat_nrows(A), mat_ncols(A))
-      CALL DLACPY('N', nrows, ncols, A%obj%p, nrows, B%obj%p, nrows)
+      CALL mat_create(B, mat_nrows(A), mat_ncols(A), mat_blacs_env(A))
+      CALL cp_fm_to_fm(A%obj%p, B%obj%p)
    END SUBROUTINE mat_copy_d
 
    SUBROUTINE mat_copy_z(A, B)
       TYPE(mat_z_obj), INTENT(IN) :: A
       TYPE(mat_z_obj), INTENT(INOUT) :: B
-      INTEGER :: nrows, ncols
-      nrows = mat_nrows(A)
-      ncols = mat_ncols(A)
       IF (ASSOCIATED(B%obj)) CALL mat_release(B)
-      CALL mat_create(B, mat_nrows(A), mat_ncols(A))
-      CALL ZLACPY('N', nrows, ncols, A%obj%p, nrows, B%obj%p, nrows)
+      CALL mat_create(B, mat_nrows(A), mat_ncols(A), mat_blacs_env(A))
+      CALL cp_cfm_to_cfm(A%obj%p, B%obj%p)
    END SUBROUTINE mat_copy_z
 
    SUBROUTINE mat_scale_d(mat, scalar)
       TYPE(mat_d_obj), INTENT(INOUT) :: mat
       REAL(KIND=dp), INTENT(IN) :: scalar
-      mat%obj%p = scalar * mat%obj%p
+      IF (ASSOCIATED(mat%obj)) THEN
+         CALL cp_fm_scale(scalar, mat%obj%p)
+      END IF
    END SUBROUTINE mat_scale_d
 
    SUBROUTINE mat_scale_z(mat, scalar)
       TYPE(mat_z_obj), INTENT(INOUT) :: mat
       COMPLEX(KIND=dp), INTENT(IN) :: scalar
-      mat%obj%p = scalar * mat%obj%p
+      IF (ASSOCIATED(mat%obj)) THEN
+         CALL cp_cfm_scale(scalar, mat%obj%p)
+      END IF
    END SUBROUTINE mat_scale_z
 
    SUBROUTINE mat_associate_d(A, B)
@@ -965,23 +1030,13 @@ CONTAINS
    FUNCTION mat_norm_d(mat) RESULT(res)
       TYPE(mat_d_obj), INTENT(IN) :: mat
       REAL(KIND=dp) :: res
-      INTEGER :: nrows, ncols
-      REAL(KIND=dp), DIMENSION(1) :: work
-      nrows = mat_nrows(mat)
-      ncols = mat_ncols(mat)
-      ! work is a dummy for Frobenius norm
-      res = DLANGE('F', nrows, ncols, mat%obj%p, nrows, work)
+      res = cp_fm_norm(mat%obj%p, 'F')
    END FUNCTION mat_norm_d
 
    FUNCTION mat_norm_z(mat) RESULT(res)
       TYPE(mat_z_obj), INTENT(IN) :: mat
       REAL(KIND=dp) :: res
-      INTEGER :: nrows, ncols
-      COMPLEX(KIND=dp), DIMENSION(1) :: work
-      nrows = mat_nrows(mat)
-      ncols = mat_ncols(mat)
-      ! work is a dummy for Frobenius norm
-      res = ZLANGE('F', nrows, ncols, mat%obj%p, nrows, work)
+      res = cp_cfm_norm(mat%obj%p, 'F')
    END FUNCTION mat_norm_z
 
    PURE FUNCTION is_same_obj_d(A, B) RESULT(res)
@@ -1011,11 +1066,8 @@ CONTAINS
       REAL(KIND=dp) :: res
       INTEGER :: ii
       CPASSERT(ASSOCIATED(mat%obj))
-      CPASSERT(ALLOCATED(mat%obj%p))
-      res = 0.0_dp
-      DO ii = 1, mat_nrows(mat)
-         res = res + mat%obj%p(ii,ii)
-      END DO
+      CPASSERT(ASSOCIATED(mat%obj%p))
+      res = cp_fm_latra(mat%obj%p)
    END FUNCTION mat_trace_d
 
    FUNCTION mat_trace_z(mat) RESULT(res)
@@ -1023,11 +1075,38 @@ CONTAINS
       COMPLEX(KIND=dp) :: res
       INTEGER :: ii
       CPASSERT(ASSOCIATED(mat%obj))
-      CPASSERT(ALLOCATED(mat%obj%p))
-      res = 0.0_dp
-      DO ii = 1, mat_nrows(mat)
-         res = res + mat%obj%p(ii,ii)
-      END DO
+      CPASSERT(ASSOCIATED(mat%obj%p))
+      res = cp_cfm_latra(mat%obj%p)
    END FUNCTION mat_trace_z
+
+   SUBROUTINE mat_transpose_d(mat, mat_t)
+      TYPE(mat_d_obj), INTENT(IN) :: mat
+      TYPE(mat_d_obj), INTENT(INOUT) :: mat_t
+      CPASSERT(ASSOCIATED(mat%obj))
+      CPASSERT(ASSOCIATED(mat%obj%p))
+      CALL mat_release(mat_t)
+      CALL mat_create(mat_t, &
+                      mat_nrows(mat), &
+                      mat_ncols(mat), &
+                      mat_blacs_env(mat))
+      CALL cp_fm_transpose(mat%obj%p, mat_t%obj%p)
+   END SUBROUTINE mat_transpose_d
+
+   SUBROUTINE mat_transpose_z(mat, mat_t, trans)
+      TYPE(mat_z_obj), INTENT(IN) :: mat
+      TYPE(mat_z_obj), INTENT(INOUT) :: mat_t
+      CHARACTER, INTENT(IN), OPTIONAL :: trans
+      CHARACTER :: my_trans
+      CPASSERT(ASSOCIATED(mat%obj))
+      CPASSERT(ASSOCIATED(mat%obj%p))
+      my_trans = 'T'
+      IF (PRESENT(trans)) my_trans = trans
+      CALL mat_release(mat_t)
+      CALL mat_create(mat_t, &
+                      mat_nrows(mat), &
+                      mat_ncols(mat), &
+                      mat_blacs_env(mat))
+      CALL cp_cfm_transpose(mat%obj%p, my_trans, mat_t%obj%p)
+   END SUBROUTINE mat_transpose_z
 
 END MODULE matrix_types

@@ -6,3 +6,5 @@ test_matrix
 *.dSYM
 test_matrix_mat*.txt
 test_sancho
+TAGS
+PACKAGE
