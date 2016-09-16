@@ -4,7 +4,17 @@ MODULE negf_env_types
   USE matrix_types, ONLY: mat_d_obj, &
                           mat_z_obj, &
                           mat_create, &
-                          mat_release
+                          mat_release, &
+                          mat_nrows, &
+                          mat_ncols, &
+                          mat_trace, &
+                          mat_real_to_complex, &
+                          mat_scale, &
+                          mat_axpy, &
+                          mat_inv_lu, &
+                          mat_mult, &
+                          mat_associate, &
+                          mat_read
 
 #include "./base/base_uses.f90"
 
@@ -20,7 +30,8 @@ MODULE negf_env_types
             negf_env_create, &
             negf_env_get, &
             negf_env_retain, &
-            negf_env_release
+            negf_env_release, &
+            negf_env_read_matrices
 
   CHARACTER(len=*), PARAMETER, PRIVATE :: moduleN = 'negf_env_types'
   INTEGER, PRIVATE, SAVE :: last_negf_env_id = 0
@@ -44,12 +55,14 @@ MODULE negf_env_types
   TYPE negf_env_data
      INTEGER :: id_nr, ref_count
      INTEGER :: nterminals
-     INTEGER :: nE
-     REAL(KIND=dp) :: eps_E, E_min, E_max, eps_Sancho, dE
+     REAL(KIND=dp) :: eps_E, E_min, E_max, eps_Sancho
+     INTEGER :: nsteps_Sancho
+     ! INTEGER :: nE
+     ! REAL(KIND=dp) :: dE
      TYPE(mat_d_obj), DIMENSION(:), POINTER :: H_S, S_S, H_LS, S_LS, &
                                                H_L_onsite, S_L_onsite, &
                                                H_L_hopping, S_L_hopping
-     TYPE(mat_z_obj), DIMENSION(:), POINTER :: GR_S, Sigma_L, Gamma_L, GR0_L
+     ! TYPE(mat_z_obj), DIMENSION(:), POINTER :: GR_S, Sigma_L, Gamma_L, GR0_L
   END TYPE negf_env_data
 
   TYPE negf_env_obj
@@ -70,11 +83,12 @@ CONTAINS
     CPASSERT(.NOT.ASSOCIATED(negf_env%obj))
     ! default settings
     negf_env%obj%nterminals = 2
-    negf_env%obj%nE = 1000
+    ! negf_env%obj%nE = 1000
     negf_env%obj%E_min = -1.0
     negf_env%obj%E_max = 1.0
     negf_env%obj%eps_E = 1.E-05_dp
     negf_env%obj%eps_Sancho = 1.E-05_dp
+    negf_env%obj%nsteps_Sancho = 100
     ! modified settings
     IF (PRESENT(nterminals)) negf_env%obj%nterminals = nterminals
     IF (PRESENT(nE))         negf_env%obj%nE = nE
@@ -82,18 +96,24 @@ CONTAINS
     IF (PRESENT(E_max))      negf_env%obj%E_max = E_max
     IF (PRESENT(eps_E))      negf_env%obj%eps_E = eps_E
     IF (PRESENT(eps_Sancho)) negf_env%obj%eps_Sancho = eps_Sancho
+    IF (PRESENT(nsteps_Sancho)) negf_env%obj%nsteps_Sancho = nsteps_Sancho
+
     ! calculate energy step
-    dE = (negf_env%obj%E_max - negf_env%obj%E_min) / real(nE,KIND=dp)
+    ! dE = (negf_env%obj%E_max - negf_env%obj%E_min) / real(nE,KIND=dp)
     ! allocate arrays
+
     ALLOCATE(negf_env%obj)
     ALLOCATE(negf_env%obj%H_LS(nterminals))
     ALLOCATE(negf_env%obj%H_L(nterminals))
     ALLOCATE(negf_env%obj%S_LS(nterminals))
     ALLOCATE(negf_env%obj%S_L(nterminals))
     ALLOCATE(negf_env%obj%S_L(nterminals))
-    ALLOCATE(negf_env%obj%Sigma_L(nterminals))
-    ALLOCATE(negf_env%obj%Gamma_L(nterminals))
-    ALLOCATE(negf_env%obj%GR0_L(nterminals))
+
+    ! ALLOCATE(negf_env%obj%Sigma_L(nterminals))
+    ! ALLOCATE(negf_env%obj%Gamma_L(nterminals))
+    ! ALLOCATE(negf_env%obj%GR0_L(nterminals))
+    ! ALLOCATE(negf_env%obj%GR0_S(nterminals))
+
     ! book-keeping stuff
     negf_env%obj%ref_count = 1
     negf_env%obj%id_nr = last_negf_env_id + 1
@@ -120,22 +140,22 @@ CONTAINS
                           eps_Sancho, &
                           H_S, &
                           S_S, &
-                          GR_S, &
+                          ! GR_S, &
                           H_LS, &
                           S_LS, &
                           H_L, &
-                          S_L, &
-                          Sigma_L, &
-                          Gamma_L, &
-                          GR0_L)
+                          S_L)
+                          ! Sigma_L, &
+                          ! Gamma_L, &
+                          ! GR0_L)
     TYPE(negf_env_obj), INTENT(INOUT) :: negf_env
     INTEGER, INTENT(OUT), OPTIONAL :: nterminals
     REAL(KIND=dp), INTENT(OUT), OPTIONAL :: eps_E
     TYPE(mat_d_obj), INTENT(OUT), OPTIONAL :: H_S, S_S
-    TYPE(mat_z_obj), INTENT(OUT), OPTIONAL :: GR_S
+    ! TYPE(mat_z_obj), INTENT(OUT), OPTIONAL :: GR_S
     TYPE(mat_d_obj), DIMENSION(:), POINTER, OPTIONAL :: H_LS, S_LS, H_L, S_L
-    TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: Sigma_L, Gamma_L
-    TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: GR0_L
+    ! TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: Sigma_L, Gamma_L
+    ! TYPE(mat_z_obj), DIMENSION(:), POINTER, OPTIONAL :: GR0_L
 
     CHARACTER(len=*), PARAMETER :: routineN = 'negf_env_get', &
                                    routineP = moduleN//':'//routineN
@@ -148,7 +168,7 @@ CONTAINS
     ! scattering region matrices
     IF (PRESENT(H_S)) CALL mat_associate(negf_env%obj%H_S, H_S)
     IF (PRESENT(S_S)) CALL mat_associate(negf_env%obj%S_S, S_S)
-    IF (PRESENT(GR_S)) CALL mat_associate(negf_env%obj%GR_S, GR_S)
+    ! IF (PRESENT(GR_S)) CALL mat_associate(negf_env%obj%GR_S, GR_S)
     ! interface region matrices
     IF (PRESENT(H_LS)) CALL mat_associate(negf_env%H_LS, H_LS)
     IF (PRESENT(S_LS)) CALL mat_associate(negf_env%S_LS, S_LS)
@@ -157,9 +177,9 @@ CONTAINS
     IF (PRESENT(H_L_hopping)) H_L_hopping => negf_env%obj%H_L_hopping
     IF (PRESENT(S_L_onsite)) S_L_onsite => negf_env%obj%S_L_onsite
     IF (PRESENT(S_L_onsite)) S_L_hopping => negf_env%obj%S_L_hopping
-    IF (PRESENT(Sigma_L)) Sigma_L => negf_env%obj%Sigma_L
-    IF (PRESENT(Gamma_L)) Gamma_L => negf_env%obj%Gamma_L
-    IF (PRESENT(GR0_L)) GR0_L => negf_env%obj%GR0_L
+    ! IF (PRESENT(Sigma_L)) Sigma_L => negf_env%obj%Sigma_L
+    ! IF (PRESENT(Gamma_L)) Gamma_L => negf_env%obj%Gamma_L
+    ! IF (PRESENT(GR0_L)) GR0_L => negf_env%obj%GR0_L
   END SUBROUTINE negf_env_get
 
 
@@ -189,7 +209,7 @@ CONTAINS
           negf_env%obj%ref_count = 1
           CALL mat_release(negf_env%obj%H_S)
           CALL mat_release(negf_env%obj%S_S)
-          CALL mat_release(negf_env%obj%GR_S)
+          ! CALL mat_release(negf_env%obj%GR_S)
           IF (ASSOCIATED(negf_env%obj%H_LS)) THEN
              DO ii = 1, SIZE(negf_env%obj%H_LS)
                 CALL mat_release(negf_env%obj%H_LS(ii))
@@ -220,21 +240,21 @@ CONTAINS
                 CALL mat_release(negf_env%obj%S_L_hopping(ii))
              END DO
           END IF
-          IF (ASSOCIATED(negf_env%obj%Sigma_L)) THEN
-             DO ii = 1, SIZE(negf_env%obj%Sigma_L)
-                CALL mat_release(negf_env%obj%Sigma_L(ii))
-             END DO
-          END IF
-          IF (ASSOCIATED(negf_env%obj%Gamma_L)) THEN
-             DO ii = 1, SIZE(negf_env%obj%Gamma_L)
-                CALL mat_release(negf_env%obj%Gamma_L(ii))
-             END DO
-          END IF
-          IF (ASSOCIATED(negf_env%obj%GR0_L)) THEN
-             DO ii = 1, SIZE(negf_env%obj%GR0_L)
-                CALL mat_release(negf_env%obj%GR0_L(ii))
-             END DO
-          END IF
+          ! IF (ASSOCIATED(negf_env%obj%Sigma_L)) THEN
+          !    DO ii = 1, SIZE(negf_env%obj%Sigma_L)
+          !       CALL mat_release(negf_env%obj%Sigma_L(ii))
+          !    END DO
+          ! END IF
+          ! IF (ASSOCIATED(negf_env%obj%Gamma_L)) THEN
+          !    DO ii = 1, SIZE(negf_env%obj%Gamma_L)
+          !       CALL mat_release(negf_env%obj%Gamma_L(ii))
+          !    END DO
+          ! END IF
+          ! IF (ASSOCIATED(negf_env%obj%GR0_L)) THEN
+          !    DO ii = 1, SIZE(negf_env%obj%GR0_L)
+          !       CALL mat_release(negf_env%obj%GR0_L(ii))
+          !    END DO
+          ! END IF
           negf_env%obj%ref_count = 0
           DEALLOCATE(negf_env%obj)
        END IF
@@ -265,7 +285,8 @@ CONTAINS
                            negf_env%obj%H_L_hopping(iLead), &
                            negf_env%obj%S_L_onsite(iLead), &
                            negf_env%obj%S_L_hopping(iLead), &
-                           negf_env%obj%eps_Sancho)
+                           negf_env%obj%eps_Sancho, &
+                           negf_env%obj%nsteps_Sancho)
     CALL mat_copy(negf_env%obj%H_LS(iLead), work1)
     CALL mat_scale(work, (-1.0_dp,0.0_dp))
     CALL mat_axpy(EE, 'N', &
@@ -349,5 +370,38 @@ CONTAINS
     END DO
     DEALLOCATE(Sigma)
   END SUBROUTINE calc_transmission
+
+
+  SUBROUTINE negf_env_read_matrices(negf_env, &
+                                    H_S, &
+                                    S_S, &
+                                    H_L_onsite, &
+                                    H_L_hopping, &
+                                    S_L_onsite, &
+                                    S_L_hopping, &
+                                    H_LS, &
+                                    S_LS)
+    TYPE(negf_env_obj), INTENT(INOUT) :: negf_env
+    CHARACTER(LEN=default_string_length), INTENT(IN) :: H_S, S_S
+    CHARACTER(LEN=default_string_length), DIMENSION(:), INTENT(IN) :: H_L_onsite, &
+                                                                      H_L_hopping, &
+                                                                      S_L_onsite, &
+                                                                      S_L_hopping, &
+                                                                      H_LS, &
+                                                                      S_LS
+    CHARACTER(len=*), PARAMETER :: routineN = 'negf_env_read_matrices', &
+                                   routineP = moduleN//':'//routineN
+    INTEGER :: ii
+    DO ii = negf_env%obj%nterminals
+       CALL mat_read(negf_env%obj%H_L_onsite(ii), H_L_onsite(ii))
+       CALL mat_read(negf_env%obj%H_L_hopping(ii), H_L_hopping(ii))
+       CALL mat_read(negf_env%obj%S_L_onsite(ii), S_L_onsite(ii))
+       CALL mat_read(negf_env%obj%S_L_hopping(ii), S_L_hopping(ii))
+       CALL mat_read(negf_env%obj%H_LS(ii), H_LS(ii))
+       CALL mat_read(negf_env%obj%S_LS(ii), S_LS(ii))
+    END DO
+    CALL mat_read(negf_env%obj%H_S(ii), H_S(ii))
+    CALL mat_read(negf_env%obj%S_S(ii), S_S(ii))
+  END SUBROUTINE negf_env_read_matrices
 
 END MODULE negf_env_types
