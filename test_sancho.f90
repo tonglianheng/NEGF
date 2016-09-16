@@ -9,6 +9,7 @@ PROGRAM test_sancho
   REAL(KIND=dp),PARAMETER           :: eta = 1e-4
   COMPLEX(KIND=dp),PARAMETER        :: E   = (0,eta)
   INTEGER, PARAMETER                :: N1  = 2
+  INTEGER, PARAMETER                :: NSTEPS = 100
 
   REAL(KIND=dp), DIMENSION(N1,N1) :: hL, tL, shL, stL
 
@@ -37,7 +38,8 @@ PROGRAM test_sancho
                          H_hopping = mat2, &
                          S_onsite  = mat3, &
                          S_hopping = mat4, &
-                         tolerance = Tol)
+                         tolerance = Tol, &
+                         NSTEPS)
 
   WRITE (*,*) "hL = "
   CALL mat_write(mat1)

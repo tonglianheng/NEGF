@@ -1,7 +1,7 @@
 MODULE matrix_types
 
-  USE kinds, ONLY: dp
-  USE machine, ONLY: default_output_unit
+   USE kinds, ONLY: dp
+   USE machine, ONLY: default_output_unit
 
 #include "./base/base_uses.f90"
 
@@ -32,7 +32,7 @@ MODULE matrix_types
             mat_nrows, &
             mat_read, &
             mat_real_to_complex, &
-            mat_CMPLX,&            
+            mat_cmplx,&            
             mat_real,&
             mat_imag,&            
             mat_release, &
@@ -308,7 +308,7 @@ CONTAINS
     mat_d%obj%symmetry = mat_z%obj%symmetry
   END SUBROUTINE mat_imag
 
-  SUBROUTINE mat_CMPLX(mat_d, mat_d1, mat_z)
+  SUBROUTINE mat_cmplx(mat_d, mat_d1, mat_z)
     TYPE(mat_d_obj), INTENT(IN) :: mat_d
     TYPE(mat_d_obj), INTENT(IN) :: mat_d1
     TYPE(mat_z_obj), INTENT(INOUT) :: mat_z
@@ -318,7 +318,7 @@ CONTAINS
     CALL mat_create(mat_z, mat_nrows(mat_d), mat_ncols(mat_d))
     mat_z%obj%p(:,:) = CMPLX(mat_d%obj%p(:,:), mat_d1%obj%p(:,:), KIND = dp)
     mat_z%obj%symmetry = mat_d%obj%symmetry
-  END SUBROUTINE mat_CMPLX
+  END SUBROUTINE mat_cmplx
 
   ! SUBROUTINE mat_mult_d(transA, transB, alpha, A, B, beta, C)
   !   TYPE(mat_d_obj), INTENT(IN) :: A, B
