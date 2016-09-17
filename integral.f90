@@ -75,10 +75,10 @@ SUBROUTINE quad(my_negf_env, &
                 mat_integral,&
                 fcnt,&
                 func)
-!> tries to approximate an integral at [a,b] (a,b are complex) by
-!> the adaptive Simpson rule (3,5 orders) with the tolerance Tol.
-!> The integrand is func
-!> fcnt - is a number of function' evaluationsd
+!> tries to approximate an integral at [a,b] (a,b are complex) by the
+!> adaptive Simpson rule (3,5 orders) with the tolerance Tol.  The
+!> integrand is func, fcnt - is the number of function' evaluations
+!> (steps) taken by the integrator
   TYPE(negf_env_obj)            :: my_negf_env
   TYPE(mat_z_obj), INTENT(OUT)  :: mat_integral
   COMPLEX(KIND=dp), INTENT(IN)  :: a,b
